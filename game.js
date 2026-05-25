@@ -20,48 +20,41 @@ const game = new Phaser.Game(config);
 
 let player;
 let cursors;
-// NEW: Global variables so we can change the mass and update the UI
-let gravityMass = 1000000;
+let gravityMass = 0;
 let massText;
 
 function preload() {}
 
 function create() {
-  // 1. CREATE THE DRONE
+  // Define factor and inc FIRST
+  const factor = 8;
+  const inc = 10000;
+
   player = this.add.circle(400, 300, 20, 0xff0000);
   this.physics.add.existing(player);
-  player.body.setCollideWorldBounds(true);
-  player.body.setMaxVelocity(800);
-  player.body.setDrag(100, 100); // Lowered drag slightly so it orbits better
+  player.body.setCollideWorldBounds(true,1,1);
+  player.body.setDrag(0, 0); // No drag = Newton's 1st law obeyed
 
   cursors = this.input.keyboard.createCursorKeys();
 
-  // 2. CREATE THE UI TEXT
-  // Print the starting mass in the top left corner
+  // Display the actual gravityMass value (not divided)
   massText = this.add.text(16, 16, "Black Hole Mass: " + gravityMass, {
     fontSize: "20px",
     fill: "#00ff00",
   });
 
-  // 3. LISTEN FOR THE SCROLL WHEEL
-  // Phaser's built-in event for the mouse wheel
-  this.input.on(
-    "wheel",
-    function (pointer, gameObjects, deltaX, deltaY, deltaZ) {
-      // deltaY tells us which way the wheel scrolled
-      if (deltaY > 0) {
-        gravityMass -= 17; // Scrolled DOWN: Decrease mass
-      } else if (deltaY < 0) {
-        gravityMass += 17; // Scrolled UP: Increase mass
-      }
+  this.input.on("wheel", function (pointer, gameObjects, deltaX, deltaY, deltaZ) {
+    if (deltaY > 0) {
+      gravityMass -= inc * factor; // Decrease mass
+    } else if (deltaY < 0) {
+      gravityMass += inc * factor; // Increase mass
+    }
 
-      // Clamp the mass so it doesn't go below zero or get ridiculously high
-      gravityMass = Phaser.Math.Clamp(gravityMass, 0, 5000000);
+    // Allow negative mass, clamp within reasonable range
+    gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
 
-      // Update the text on the screen
-      massText.setText("Black Hole Mass: " + gravityMass);
-    },
-  );
+    massText.setText("Black Hole Mass: " + gravityMass);
+  });
 }
 
 function update() {
@@ -74,10 +67,7 @@ function update() {
     const distance = Math.sqrt(dx * dx + dy * dy);
     const safeDistance = Math.max(distance, 10);
 
-    // 4. APPLY THE DYNAMIC MASS
-    // We removed the 'const' here so it uses the global variable we are changing with the wheel!
     const accelMag = gravityMass / (safeDistance * safeDistance);
-
     const accelX = accelMag * (dx / distance);
     const accelY = accelMag * (dy / distance);
 
