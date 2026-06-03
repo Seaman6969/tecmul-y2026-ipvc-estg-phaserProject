@@ -28,7 +28,49 @@ let blackHoleGraphic;
 
 const G_CONSTANT = 300; 
 
+const colors = [
+  0x00ffff, // Cyan
+  0x39ff14, // Neon Green
+  0xff00ff, // Magenta
+  0xffff00, // Neon Yellow
+  0xff7300, // Bright Orange
+  0x00e5ff, // Electric Blue
+  0xab00ff, // Intense Purple
+  0x00ff88  // Mint Green
+];
+
 function preload() {}
+
+function createPlanet(scene, x, y, radius, color) {
+  const circle = scene.add.circle(x, y, radius, color);
+  scene.physics.add.existing(circle);
+  
+  circle.body.setCircle(radius);
+  circle.body.setCollideWorldBounds(true, 1, 1);
+  circle.body.setBounce(1, 1);
+  circle.body.setDrag(0, 0);
+  
+  circle.radius = radius;
+  circle.body.mass = radius * radius;
+  circle.body.setVelocity(
+    Phaser.Math.Between(-60, 60),
+    Phaser.Math.Between(-60, 60)
+  );
+
+  // Attach Trail to Circle
+  scene.add.particles(0, 0, 'trail_particle', {
+    speed: 0,
+    lifespan: 300,
+    scale: { start: radius / 20 * 0.8, end: 0 },
+    alpha: { start: 0.4, end: 0 },
+    blendMode: 'ADD',
+    follow: circle,
+    tint: color
+  });
+
+  nonPlayerCircles.add(circle);
+  return circle;
+}
 
 function create() {
   const factor = 8;
@@ -61,6 +103,7 @@ function create() {
   ctx.arc(8, 8, 8, 0, Math.PI * 2);
   ctx.fill();
   particleCanvas.refresh();
+  
   player = this.add.circle(400, 300, 20, 0xff0000);
   this.physics.add.existing(player);
   player.body.setCircle(20);
@@ -82,17 +125,6 @@ function create() {
 
   nonPlayerCircles = this.physics.add.group();
   
-  const colors = [
-    0x00ffff, // Cyan
-    0x39ff14, // Neon Green
-    0xff00ff, // Magenta
-    0xffff00, // Neon Yellow
-    0xff7300, // Bright Orange
-    0x00e5ff, // Electric Blue
-    0xab00ff, // Intense Purple
-    0x00ff88  // Mint Green
-  ];
-
   const numCircles = 12;
   for (let i = 0; i < numCircles; i++) {
     const radius = Phaser.Math.Between(10, 30);
@@ -100,31 +132,7 @@ function create() {
     const y = Phaser.Math.Between(radius + 50, 600 - radius - 50);
     const color = Phaser.Utils.Array.GetRandom(colors);
 
-    const circle = this.add.circle(x, y, radius, color);
-    this.physics.add.existing(circle);
-    
-    circle.body.setCircle(radius);
-    circle.body.setCollideWorldBounds(true, 1, 1);
-    circle.body.setBounce(1, 1);
-    circle.body.setDrag(0, 0);
-    
-    circle.radius = radius;
-    circle.body.mass = radius * radius;
-    circle.body.setVelocity(
-      Phaser.Math.Between(-60, 60),
-      Phaser.Math.Between(-60, 60)
-    );
-    this.add.particles(0, 0, 'trail_particle', {
-      speed: 0,
-      lifespan: 300,
-      scale: { start: radius / 20 * 0.8, end: 0 },
-      alpha: { start: 0.4, end: 0 },
-      blendMode: 'ADD',
-      follow: circle,
-      tint: color
-    });
-
-    nonPlayerCircles.add(circle);
+    createPlanet(this, x, y, radius, color);
   }
 
   this.physics.add.collider(player, nonPlayerCircles);
@@ -145,7 +153,6 @@ function create() {
     fill: "#8fa0c0"
   });
 
-  
   this.input.on("wheel", function (pointer, gameObjects, deltaX, deltaY, deltaZ) {
     if (deltaY > 0) {
       gravityMass -= inc * factor;
@@ -164,7 +171,21 @@ function create() {
       massText.setFill("#00ff00"); // Neutral (Green)
     }
   });
+
   blackHoleGraphic = this.add.graphics();
+
+  this.time.addEvent({
+    delay: 16000,
+    callback: () => {
+      const radius = Phaser.Math.Between(10, 30);
+      const x = Phaser.Math.Between(radius + 50, 800 - radius - 50);
+      const y = Phaser.Math.Between(radius + 50, 600 - radius - 50);
+      const color = Phaser.Utils.Array.GetRandom(colors);
+      createPlanet(this, x, y, radius, color);
+    },
+    callbackScope: this,
+    loop: true
+  });
 }
 
 function update() {
@@ -198,25 +219,13 @@ function update() {
       blackHoleGraphic.fillStyle(0xffffff, 1.0);
       blackHoleGraphic.fillCircle(pointer.x, pointer.y, baseRadius * 0.7);
     }
-
-    const dx = pointer.x - player.x;
-    const dy = pointer.y - player.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const safeDistance = Math.max(distance, 15);
-
-    const accelMag = gravityMass / (safeDistance * safeDistance);
-    const accelX = accelMag * (dx / distance);
-    const accelY = accelMag * (dy / distance);
-
-    player.body.setAcceleration(accelX, accelY);
   } else {
     statusText.setText("Status: Inactive (Click and hold to activate)");
     statusText.setFill("#8fa0c0");
-    player.body.setAcceleration(0, 0);
   }
-  const circlesArray = nonPlayerCircles.getChildren();
+  const allPlanets = [player, ...nonPlayerCircles.getChildren()];
 
-  circlesArray.forEach((circleI) => {
+  allPlanets.forEach((circleI) => {
     let netAccelX = 0;
     let netAccelY = 0;
 
@@ -232,13 +241,12 @@ function update() {
         netAccelY += accelMag * (dy / distance);
       }
     }
-    circlesArray.forEach((circleJ) => {
+    allPlanets.forEach((circleJ) => {
       if (circleI === circleJ) return;
 
       const dx = circleJ.x - circleI.x;
       const dy = circleJ.y - circleI.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-
       const safeDistance = Math.max(distance, circleI.radius + circleJ.radius);
       const massJ = circleJ.body.mass;
       const accelMag = (G_CONSTANT * massJ) / (safeDistance * safeDistance);
