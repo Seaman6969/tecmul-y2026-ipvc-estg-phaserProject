@@ -28,6 +28,8 @@ let blackHoleGraphic;
 let rd = 150;
 let G = 2000;
 const N = 5;
+let p_name = "jackass";
+let playerText;
 
 const G_CONSTANT = 300;
 
@@ -186,6 +188,13 @@ function create() {
     fill: "#8fa0c0"
   });
 
+  playerText = this.add.text(player.x, player.y, p_name, {
+    fontFamily: "'Outfit', 'Courier New', sans-serif",
+    fontSize: "12px",
+    fill: "#ffffff",
+    fontStyle: "bold"
+  }).setOrigin(0.5);
+
   this.input.on("wheel", function (pointer, gameObjects, deltaX, deltaY, deltaZ) {
     if (deltaY > 0) {
       gravityMass -= G;
@@ -298,4 +307,6 @@ function update() {
 
     circleI.body.setAcceleration(netAccelX, netAccelY);
   });
+
+  playerText.setPosition(player.x, player.y);
 }
