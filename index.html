@@ -3,8 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <title>Space minotaur</title>
-    <!-- Load Phaser 3 -->
+    <!-- Load Phaser 3 and game scripts (non-module order) -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <script src="physics.js"></script>
+    <script src="planets.js"></script>
+    <script src="game.js"></script>
     <style>
       body {
         margin: 0;
@@ -17,7 +20,6 @@
     </style>
   </head>
   <body>
-    <!-- Load your game script -->
-    <script src="game.js"></script>
+    <!-- Game scripts loaded in head so opening the file directly works -->
   </body>
 </html>

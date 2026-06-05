@@ -1,7 +1,7 @@
 const config = {
   type: Phaser.AUTO,
-  width: 800,
-  height: 600,
+  width: window.innerWidth,
+  height: window.innerHeight,
   backgroundColor: "#030308",
   physics: {
     default: "arcade",
@@ -15,6 +15,7 @@ const config = {
     update: update,
   },
 };
+
 
 const game = new Phaser.Game(config);
 
@@ -31,8 +32,6 @@ const N = 5;
 let p_name = "jackass";
 let playerText;
 
-const G_CONSTANT = 300;
-
 const colors = [
   0x00ffff,
   0x39ff14,
@@ -46,60 +45,9 @@ const colors = [
 
 function preload() {}
 
-function resolveElasticCollision(obj1, obj2) {
-  const m1 = obj1.body.mass;
-  const m2 = obj2.body.mass;
-  const v1x = obj1.prevVx !== undefined ? obj1.prevVx : obj1.body.velocity.x;
-  const v1y = obj1.prevVy !== undefined ? obj1.prevVy : obj1.body.velocity.y;
-  const v2x = obj2.prevVx !== undefined ? obj2.prevVx : obj2.body.velocity.x;
-  const v2y = obj2.prevVy !== undefined ? obj2.prevVy : obj2.body.velocity.y;
-  const dx = obj2.x - obj1.x;
-  const dy = obj2.y - obj1.y;
-  const distSq = dx * dx + dy * dy;
-  if (distSq === 0) return;
-  const rvx = v1x - v2x;
-  const rvy = v1y - v2y;
-  const velAlongNormal = rvx * (dx / Math.sqrt(distSq)) + rvy * (dy / Math.sqrt(distSq));
-  if (velAlongNormal < 0) return;
-  const impulseScalar = -2 * velAlongNormal / (1 / m1 + 1 / m2);
-  const ix = impulseScalar * (dx / Math.sqrt(distSq));
-  const iy = impulseScalar * (dy / Math.sqrt(distSq));
-  obj1.body.velocity.x = v1x + ix / m1;
-  obj1.body.velocity.y = v1y + iy / m1;
-  obj2.body.velocity.x = v2x - ix / m2;
-  obj2.body.velocity.y = v2y - iy / m2;
-}
+// Collision resolution and physics step are in physics.js
 
-function createPlanet(scene, x, y, radius, color) {
-  const circle = scene.add.circle(x, y, radius, color);
-  scene.physics.add.existing(circle);
-  
-  circle.body.setCircle(radius);
-  circle.body.setCollideWorldBounds(false);
-  circle.body.setBounce(0, 0);
-  circle.body.setDrag(0, 0);
-  
-  circle.radius = radius;
-  circle.body.mass = radius * radius;
-
-  circle.body.setVelocity(
-    Phaser.Math.Between(-60, 60),
-    Phaser.Math.Between(-60, 60)
-  );
-
-  scene.add.particles(0, 0, 'trail_particle', {
-    speed: 0,
-    lifespan: 300,
-    scale: { start: radius / 20 * 0.8, end: 0 },
-    alpha: { start: 0.4, end: 0 },
-    blendMode: 'ADD',
-    follow: circle,
-    tint: color
-  });
-
-  nonPlayerCircles.add(circle);
-  return circle;
-}
+// Planet creation moved to planets.js
 
 function create() {
   for (let i = 0; i < 120; i++) {
@@ -182,6 +130,62 @@ function create() {
     fontStyle: "bold"
   });
 
+  // Allow clicking the mass text to edit it directly
+  massText.setInteractive({ useHandCursor: true });
+  const scene = this;
+  massText.on('pointerdown', function () {
+    // prevent multiple inputs
+    if (document.getElementById('mass-input')) return;
+
+    const canvasRect = scene.game.canvas.getBoundingClientRect();
+    const input = document.createElement('input');
+    input.id = 'mass-input';
+    input.type = 'text';
+    input.value = gravityMass;
+    input.style.position = 'absolute';
+    input.style.left = (canvasRect.left + massText.x) + 'px';
+    input.style.top = (canvasRect.top + massText.y) + 'px';
+    input.style.zIndex = 10000;
+    input.style.background = 'rgba(0,0,0,0.8)';
+    input.style.color = '#00ff00';
+    input.style.border = '1px solid #00ff00';
+    input.style.font = '16px "Outfit", "Courier New", sans-serif';
+    input.style.padding = '2px 6px';
+    input.style.outline = 'none';
+    document.body.appendChild(input);
+    input.focus();
+    input.select();
+
+    function commit() {
+      const v = Number(input.value);
+      if (!isNaN(v)) {
+        gravityMass = v;
+      }
+      gravityMass = Phaser.Math.Clamp(gravityMass, -500000000, 500000000);
+      massText.setText("Black Hole Mass: " + gravityMass);
+      if (gravityMass > 0) {
+        massText.setFill("#00ffff");
+      } else if (gravityMass < 0) {
+        massText.setFill("#ff4500");
+      } else {
+        massText.setFill("#00ff00");
+      }
+      input.remove();
+    }
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        commit();
+      } else if (e.key === 'Escape') {
+        input.remove();
+      }
+    });
+
+    input.addEventListener('blur', function () {
+      commit();
+    });
+  });
+
   statusText = this.add.text(20, 45, "Status: Inactive (Click and hold to activate)", {
     fontFamily: "'Outfit', 'Courier New', sans-serif",
     fontSize: "12px",
@@ -201,7 +205,7 @@ function create() {
     } else if (deltaY < 0) {
       gravityMass += G;
     }
-    gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
+    gravityMass = Phaser.Math.Clamp(gravityMass, -500000000, 500000000);
 
     massText.setText("Black Hole Mass: " + gravityMass);
     
@@ -213,6 +217,32 @@ function create() {
       massText.setFill("#00ff00");
     }
   });
+
+  this.input.keyboard.on('keydown', function(event) {
+    if (event.key === 'ArrowUp') {
+      gravityMass += G;
+    } else if (event.key === 'ArrowDown') {
+      gravityMass -= G;
+    } else if (event.key === '+' || event.key === '=') {
+      gravityMass += G;
+    } else if (event.key === '-') {
+      gravityMass -= G;
+    } else if (event.key === '0') {
+      gravityMass = 0;
+    } else {
+      return;
+    }
+
+    gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
+    massText.setText("Black Hole Mass: " + gravityMass);
+    if (gravityMass > 0) {
+      massText.setFill("#00ffff");
+    } else if (gravityMass < 0) {
+      massText.setFill("#ff4500");
+    } else {
+      massText.setFill("#00ff00");
+    }
+  }, this);
 
   blackHoleGraphic = this.add.graphics();
 }
@@ -254,59 +284,7 @@ function update() {
   }
 
   const allPlanets = nonPlayerCircles.getChildren();
-
-  allPlanets.forEach((circle) => {
-    circle.prevVx = circle.body.velocity.x;
-    circle.prevVy = circle.body.velocity.y;
-  });
-
-  allPlanets.forEach((circleI) => {
-    if (circleI.x < 0) {
-      circleI.x = 800;
-    } else if (circleI.x > 800) {
-      circleI.x = 0;
-    }
-    if (circleI.y < 0) {
-      circleI.y = 600;
-    } else if (circleI.y > 600) {
-      circleI.y = 0;
-    }
-
-    let netAccelX = 0;
-    let netAccelY = 0;
-
-    if (pointer.leftButtonDown()) {
-      const dx = pointer.x - circleI.x;
-      const dy = pointer.y - circleI.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const safeDistance = Math.max(distance, 15);
-      
-      const accelMag = gravityMass / (safeDistance * safeDistance);
-      if (distance > 0.1) {
-        netAccelX += accelMag * (dx / distance);
-        netAccelY += accelMag * (dy / distance);
-      }
-    }
-
-    allPlanets.forEach((circleJ) => {
-      if (circleI === circleJ) return;
-
-      const dx = circleJ.x - circleI.x;
-      const dy = circleJ.y - circleI.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      const safeDistance = Math.max(distance, circleI.radius + circleJ.radius);
-      const massJ = circleJ.body.mass;
-      const accelMag = (G_CONSTANT * massJ) / (safeDistance * safeDistance);
-
-      if (distance > 0.1) {
-        netAccelX += accelMag * (dx / distance);
-        netAccelY += accelMag * (dy / distance);
-      }
-    });
-
-    circleI.body.setAcceleration(netAccelX, netAccelY);
-  });
+  stepPhysics(allPlanets, pointer, gravityMass, this.scale.width, this.scale.height);
 
   playerText.setPosition(player.x, player.y);
 }
