@@ -37,7 +37,7 @@ function wrapPosition(circle, width, height) {
   }
 }
 
-function stepPhysics(allPlanets, pointer, gravityMass, width = 800, height = 600) {
+function stepPhysics(allPlanets, fixedPlanets = [], pointer, gravityMass, width = 800, height = 600) {
   allPlanets.forEach((circle) => {
     circle.prevVx = circle.body.velocity.x;
     circle.prevVy = circle.body.velocity.y;
@@ -70,6 +70,21 @@ function stepPhysics(allPlanets, pointer, gravityMass, width = 800, height = 600
 
       const safeDistance = Math.max(distance, circleI.radius + circleJ.radius);
       const massJ = circleJ.body.mass;
+      const accelMag = (G_CONSTANT * massJ) / (safeDistance * safeDistance);
+
+      if (distance > 0.1) {
+        netAccelX += accelMag * (dx / distance);
+        netAccelY += accelMag * (dy / distance);
+      }
+    });
+
+    fixedPlanets.forEach((fixedPlanet) => {
+      const dx = fixedPlanet.x - circleI.x;
+      const dy = fixedPlanet.y - circleI.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      const safeDistance = Math.max(distance, circleI.radius + fixedPlanet.radius);
+      const massJ = fixedPlanet.body.mass;
       const accelMag = (G_CONSTANT * massJ) / (safeDistance * safeDistance);
 
       if (distance > 0.1) {

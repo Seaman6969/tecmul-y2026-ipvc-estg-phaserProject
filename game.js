@@ -25,6 +25,7 @@ let gravityMass = 0;
 let massText;
 let statusText;
 let nonPlayerCircles;
+let fixedPlanets;
 let blackHoleGraphic;
 let rd = 150;
 let G = 2000;
@@ -79,6 +80,19 @@ function create() {
   particleCanvas.refresh();
 
   nonPlayerCircles = this.physics.add.group();
+  fixedPlanets = [];
+
+  const fixedPlanetData = [
+    { x: 140, y: 140, radius: 40, color: 0x3399ff },
+    { x: 660, y: 120, radius: 35, color: 0xffaa00 },
+    { x: 160, y: 500, radius: 45, color: 0x8a2be2 },
+    { x: 640, y: 470, radius: 30, color: 0x22ff88 },
+  ];
+
+  fixedPlanetData.forEach(data => {
+    const fixedPlanet = createFixedPlanet(this, data.x, data.y, data.radius, data.color);
+    fixedPlanets.push(fixedPlanet);
+  });
   
   player = this.add.circle(400, 300, 20, 0xff0000);
   this.physics.add.existing(player);
@@ -108,12 +122,13 @@ function create() {
   const numCircles = N - 1;
   for (let i = 0; i < numCircles; i++) {
     const radius = Phaser.Math.Between(10, 30);
-    let x, y, dist;
+    let x, y, dist, tooCloseToFixed;
     do {
       x = Phaser.Math.Between(radius + 50, 800 - radius - 50);
       y = Phaser.Math.Between(radius + 50, 600 - radius - 50);
       dist = Phaser.Math.Distance.Between(x, y, player.x, player.y);
-    } while (dist < rd);
+      tooCloseToFixed = fixedPlanets.some(fp => Phaser.Math.Distance.Between(x, y, fp.x, fp.y) < fp.radius + radius + 20);
+    } while (dist < rd || tooCloseToFixed);
     const color = Phaser.Utils.Array.GetRandom(colors);
 
     createPlanet(this, x, y, radius, color);
@@ -284,7 +299,7 @@ function update() {
   }
 
   const allPlanets = nonPlayerCircles.getChildren();
-  stepPhysics(allPlanets, pointer, gravityMass, this.scale.width, this.scale.height);
+  stepPhysics(allPlanets, fixedPlanets, pointer, gravityMass, this.scale.width, this.scale.height);
 
   playerText.setPosition(player.x, player.y);
 }
