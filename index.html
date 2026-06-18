@@ -8,7 +8,10 @@
     <script src="physics.js"></script>
     <script src="planets.js"></script>
     <script src="gameobjects.js"></script>
+    <script src="camera.js"></script>
     <script src="game.js"></script>
+    <!-- Debug overlay (uncomment to enable debug borders) -->
+    <script src="debug_overlay.js"></script>
     <style>
       body {
         margin: 0;
@@ -22,5 +25,10 @@
   </head>
   <body>
     <!-- Game scripts loaded in head so opening the file directly works -->
+        <div style="width:100%; height:100%; display:absolute;">
+            <div style="width 100px; height:100px; display:relative; background-color:white; top:0px; left:0px;">
+                
+            </div>
+        </div>
   </body>
 </html>

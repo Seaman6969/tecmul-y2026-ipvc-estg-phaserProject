@@ -59,10 +59,9 @@ function stepPhysics(allEntities, pointer, gravityMass, width = 800, height = 60
   const dt = Math.max(delta, 1) / 1000;
   allEntities.forEach((entity) => {
     if (!entity.physics) return;
-    entity.prevSpeed = {
-      x: entity.physics.speed.x,
-      y: entity.physics.speed.y
-    };
+    if (!entity.prevSpeed) entity.prevSpeed = { x: 0, y: 0 };
+    entity.prevSpeed.x = entity.physics.speed.x;
+    entity.prevSpeed.y = entity.physics.speed.y;
   });
 
   allEntities.forEach((entity) => {

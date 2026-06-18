@@ -75,57 +75,7 @@ function create() {
     nonPlayerCircles = this.physics.add.group();
     fixedPlanets = [];
     physicsEntities = [];
-    cameraKeys = this.input.keyboard.addKeys({
-        left: Phaser.Input.Keyboard.KeyCodes.LEFT,
-        right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
-        up: Phaser.Input.Keyboard.KeyCodes.UP,
-        down: Phaser.Input.Keyboard.KeyCodes.DOWN,
-        a: Phaser.Input.Keyboard.KeyCodes.A,
-        d: Phaser.Input.Keyboard.KeyCodes.D,
-        w: Phaser.Input.Keyboard.KeyCodes.W,
-        s: Phaser.Input.Keyboard.KeyCodes.S
-    });
-    this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
-    // Start centered on the world
-    this.cameras.main.centerOn(worldWidth * 0.5, worldHeight * 0.5);
-
-    // Middle-mouse dragging setup
-    const cam = this.cameras.main;
-    let isMiddleDragging = false;
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let camStartX = 0;
-    let camStartY = 0;
-
-    this.input.on('pointerdown', (pointer) => {
-        if (pointer.middleButtonDown()) {
-            // Prevent browser default middle-click behavior
-            if (pointer.event && pointer.event.preventDefault) pointer.event.preventDefault();
-            isMiddleDragging = true;
-            dragStartX = pointer.x;
-            dragStartY = pointer.y;
-            camStartX = cam.scrollX;
-            camStartY = cam.scrollY;
-        }
-    });
-
-    this.input.on('pointerup', (pointer) => {
-        if (!pointer.middleButtonDown()) {
-            isMiddleDragging = false;
-        }
-    });
-
-    this.input.on('pointermove', (pointer) => {
-        if (!isMiddleDragging) return;
-        const dx = pointer.x - dragStartX;
-        const dy = pointer.y - dragStartY;
-        cam.scrollX = camStartX - dx / cam.zoom;
-        cam.scrollY = camStartY - dy / cam.zoom;
-        const worldW = this.scale.width * GameObjects.world.scale;
-        const worldH = this.scale.height * GameObjects.world.scale;
-        cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, worldW - cam.width / cam.zoom);
-        cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, worldH - cam.height / cam.zoom);
-    });
+    // Camera setup moved to camera.js
 
     const centerPlanet = createFixedPlanet(
         this,
@@ -172,8 +122,6 @@ function create() {
     physicsEntities.push(planet);
 
     this.physics.add.collider(nonPlayerCircles, nonPlayerCircles, resolveElasticCollision);
-
-    cursors = this.input.keyboard.createCursorKeys();
 
     massText = this.add.text(20, 20, "Black Hole Mass: " + gravityMass, {
         fontFamily: "'Outfit', 'Courier New', sans-serif",
@@ -244,90 +192,10 @@ function create() {
         fill: "#8fa0c0"
     });
 
-    this.input.on("wheel", function (pointer, gameObjects, deltaX, deltaY, deltaZ) {
-        const zoomStep = 0.1;
-        const minZoom = 0.2;
-        const maxZoom = 3.0;
-
-        // If Shift is held, preserve original behavior: change gravity mass
-        const event = pointer.event || {};
-        if (event.shiftKey) {
-            if (deltaY > 0) {
-                gravityMass -= G;
-            } else if (deltaY < 0) {
-                gravityMass += G;
-            }
-            gravityMass = Phaser.Math.Clamp(gravityMass, -500000000, 500000000);
-
-            massText.setText("Black Hole Mass: " + gravityMass);
-
-            if (gravityMass > 0) {
-                massText.setFill("#00ffff");
-            } else if (gravityMass < 0) {
-                massText.setFill("#ff4500");
-            } else {
-                massText.setFill("#00ff00");
-            }
-            return;
-        }
-
-        // Default: use wheel to zoom camera
-        if (deltaY > 0) {
-            cam.setZoom(Phaser.Math.Clamp(cam.zoom - zoomStep, minZoom, maxZoom));
-        } else if (deltaY < 0) {
-            cam.setZoom(Phaser.Math.Clamp(cam.zoom + zoomStep, minZoom, maxZoom));
-        }
-    });
-
-    this.input.keyboard.on('keydown', function (event) {
-        const zoomStep = 0.1;
-        const minZoom = 0.2;
-        const maxZoom = 3.0;
-
-        if (event.key === 'ArrowUp') {
-            gravityMass += G;
-        } else if (event.key === 'ArrowDown') {
-            gravityMass -= G;
-        } else if (event.key === '+' || event.key === '=') {
-            // If Shift is held, adjust gravity mass (legacy); otherwise zoom in
-            if (event.shiftKey) {
-                gravityMass += G;
-                gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
-                massText.setText("Black Hole Mass: " + gravityMass);
-                if (gravityMass > 0) {
-                    massText.setFill("#00ffff");
-                } else if (gravityMass < 0) {
-                    massText.setFill("#ff4500");
-                } else {
-                    massText.setFill("#00ff00");
-                }
-            } else {
-                cam.setZoom(Phaser.Math.Clamp(cam.zoom + zoomStep, minZoom, maxZoom));
-            }
-        } else if (event.key === '-') {
-            if (event.shiftKey) {
-                gravityMass -= G;
-                gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
-                massText.setText("Black Hole Mass: " + gravityMass);
-                if (gravityMass > 0) {
-                    massText.setFill("#00ffff");
-                } else if (gravityMass < 0) {
-                    massText.setFill("#ff4500");
-                } else {
-                    massText.setFill("#00ff00");
-                }
-            } else {
-                cam.setZoom(Phaser.Math.Clamp(cam.zoom - zoomStep, minZoom, maxZoom));
-            }
-        } else if (event.key === '0') {
-            gravityMass = 0;
-            gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
-            massText.setText("Black Hole Mass: " + gravityMass);
-            massText.setFill("#00ff00");
-        } else {
-            return;
-        }
-    }, this);
+    // initialize camera controls (center, drag, zoom, keys)
+    if (typeof CameraControls !== 'undefined') CameraControls.init(this);
+    // optional debug overlay
+    if (typeof DebugOverlay !== 'undefined') DebugOverlay.init(this);
 
     blackHoleGraphic = this.add.graphics();
 }
@@ -389,31 +257,11 @@ function update() {
     const allPhysicsEntities = physicsEntities.filter(entity => entity && entity.physics);
     updateOrbitingBodies(allPhysicsEntities, this.game.loop.delta);
 
-    const cam = this.cameras.main;
-    let camMoveX = 0;
-    let camMoveY = 0;
-    if (cursors.left.isDown || cameraKeys.left.isDown) {
-        camMoveX -= 1;
-    }
-    if (cursors.right.isDown || cameraKeys.right.isDown) {
-        camMoveX += 1;
-    }
-    if (cursors.up.isDown || cameraKeys.up.isDown) {
-        camMoveY -= 1;
-    }
-    if (cursors.down.isDown || cameraKeys.down.isDown) {
-        camMoveY += 1;
-    }
-    if (camMoveX !== 0 || camMoveY !== 0) {
-        const deltaSeconds = Math.max(this.game.loop.delta, 1) / 1000;
-        cam.scrollX += camMoveX * GameObjects.camera.speed * deltaSeconds;
-        cam.scrollY += camMoveY * GameObjects.camera.speed * deltaSeconds;
-        const worldWidth = this.scale.width * GameObjects.world.scale;
-        const worldHeight = this.scale.height * GameObjects.world.scale;
-        cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, worldWidth - cam.width);
-        cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, worldHeight - cam.height);
-    }
+    // update camera controls
+    if (typeof CameraControls !== 'undefined') CameraControls.update(this);
 
     stepPhysics(allPhysicsEntities, pointer, gravityMass, this.scale.width * GameObjects.world.scale, this.scale.height * GameObjects.world.scale, this.game.loop.delta);
+
+    if (typeof DebugOverlay !== 'undefined') DebugOverlay.update(this);
 
 }
