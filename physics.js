@@ -1,12 +1,12 @@
 const G_CONSTANT = 300;
 
 function resolveElasticCollision(obj1, obj2) {
-  const m1 = obj1.body.mass;
-  const m2 = obj2.body.mass;
-  const v1x = obj1.prevVx !== undefined ? obj1.prevVx : obj1.body.velocity.x;
-  const v1y = obj1.prevVy !== undefined ? obj1.prevVy : obj1.body.velocity.y;
-  const v2x = obj2.prevVx !== undefined ? obj2.prevVx : obj2.body.velocity.x;
-  const v2y = obj2.prevVy !== undefined ? obj2.prevVy : obj2.body.velocity.y;
+  const m1 = obj1.physics?.mass ?? obj1.body.mass;
+  const m2 = obj2.physics?.mass ?? obj2.body.mass;
+  const v1x = obj1.prevSpeed?.x !== undefined ? obj1.prevSpeed.x : obj1.body.velocity.x;
+  const v1y = obj1.prevSpeed?.y !== undefined ? obj1.prevSpeed.y : obj1.body.velocity.y;
+  const v2x = obj2.prevSpeed?.x !== undefined ? obj2.prevSpeed.x : obj2.body.velocity.x;
+  const v2y = obj2.prevSpeed?.y !== undefined ? obj2.prevSpeed.y : obj2.body.velocity.y;
   const dx = obj2.x - obj1.x;
   const dy = obj2.y - obj1.y;
   const distSq = dx * dx + dy * dy;
@@ -18,10 +18,28 @@ function resolveElasticCollision(obj1, obj2) {
   const impulseScalar = -2 * velAlongNormal / (1 / m1 + 1 / m2);
   const ix = impulseScalar * (dx / Math.sqrt(distSq));
   const iy = impulseScalar * (dy / Math.sqrt(distSq));
-  obj1.body.velocity.x = v1x + ix / m1;
-  obj1.body.velocity.y = v1y + iy / m1;
-  obj2.body.velocity.x = v2x - ix / m2;
-  obj2.body.velocity.y = v2y - iy / m2;
+  const newV1x = v1x + ix / m1;
+  const newV1y = v1y + iy / m1;
+  const newV2x = v2x - ix / m2;
+  const newV2y = v2y - iy / m2;
+
+  if (obj1.body) {
+    obj1.body.velocity.x = newV1x;
+    obj1.body.velocity.y = newV1y;
+  }
+  if (obj1.physics) {
+    obj1.physics.speed.x = newV1x;
+    obj1.physics.speed.y = newV1y;
+  }
+
+  if (obj2.body) {
+    obj2.body.velocity.x = newV2x;
+    obj2.body.velocity.y = newV2y;
+  }
+  if (obj2.physics) {
+    obj2.physics.speed.x = newV2x;
+    obj2.physics.speed.y = newV2y;
+  }
 }
 
 function wrapPosition(circle, width, height) {
@@ -37,21 +55,26 @@ function wrapPosition(circle, width, height) {
   }
 }
 
-function stepPhysics(allPlanets, fixedPlanets = [], pointer, gravityMass, width = 800, height = 600) {
-  allPlanets.forEach((circle) => {
-    circle.prevVx = circle.body.velocity.x;
-    circle.prevVy = circle.body.velocity.y;
+function stepPhysics(allEntities, pointer, gravityMass, width = 800, height = 600, delta = 16.666) {
+  const dt = Math.max(delta, 1) / 1000;
+  allEntities.forEach((entity) => {
+    if (!entity.physics) return;
+    entity.prevSpeed = {
+      x: entity.physics.speed.x,
+      y: entity.physics.speed.y
+    };
   });
 
-  allPlanets.forEach((circleI) => {
-    wrapPosition(circleI, width, height);
+  allEntities.forEach((entity) => {
+    if (!entity.physics) return;
+    if (entity.physics.immovable) return;
 
     let netAccelX = 0;
     let netAccelY = 0;
 
     if (pointer && pointer.leftButtonDown()) {
-      const dx = pointer.x - circleI.x;
-      const dy = pointer.y - circleI.y;
+      const dx = pointer.x - entity.x;
+      const dy = pointer.y - entity.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
       const safeDistance = Math.max(distance, 15);
       const accelMag = gravityMass / (safeDistance * safeDistance);
@@ -61,15 +84,14 @@ function stepPhysics(allPlanets, fixedPlanets = [], pointer, gravityMass, width 
       }
     }
 
-    allPlanets.forEach((circleJ) => {
-      if (circleI === circleJ) return;
+    allEntities.forEach((other) => {
+      if (other === entity || !other.physics || !other.physics.attractsOthers) return;
 
-      const dx = circleJ.x - circleI.x;
-      const dy = circleJ.y - circleI.y;
+      const dx = other.x - entity.x;
+      const dy = other.y - entity.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-
-      const safeDistance = Math.max(distance, circleI.radius + circleJ.radius);
-      const massJ = circleJ.body.mass;
+      const safeDistance = Math.max(distance, entity.radius + other.radius);
+      const massJ = other.physics.mass;
       const accelMag = (G_CONSTANT * massJ) / (safeDistance * safeDistance);
 
       if (distance > 0.1) {
@@ -78,22 +100,17 @@ function stepPhysics(allPlanets, fixedPlanets = [], pointer, gravityMass, width 
       }
     });
 
-    fixedPlanets.forEach((fixedPlanet) => {
-      const dx = fixedPlanet.x - circleI.x;
-      const dy = fixedPlanet.y - circleI.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+    entity.physics.speed.x += netAccelX * dt;
+    entity.physics.speed.y += netAccelY * dt;
 
-      const safeDistance = Math.max(distance, circleI.radius + fixedPlanet.radius);
-      const massJ = fixedPlanet.body.mass;
-      const accelMag = (G_CONSTANT * massJ) / (safeDistance * safeDistance);
+    if (entity.body && entity.body.moves) {
+      entity.body.setVelocity(entity.physics.speed.x, entity.physics.speed.y);
+    } else {
+      entity.x += entity.physics.speed.x * dt;
+      entity.y += entity.physics.speed.y * dt;
+    }
 
-      if (distance > 0.1) {
-        netAccelX += accelMag * (dx / distance);
-        netAccelY += accelMag * (dy / distance);
-      }
-    });
-
-    circleI.body.setAcceleration(netAccelX, netAccelY);
+    wrapPosition(entity, width, height);
   });
 }
 
