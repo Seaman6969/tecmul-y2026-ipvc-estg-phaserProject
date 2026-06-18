@@ -13,8 +13,27 @@
         },
 
         init: function (scene) {
-            const worldWidth = scene.scale.width * GameObjects.world.scale;
-            const worldHeight = scene.scale.height * GameObjects.world.scale;
+            const cam = scene.cameras.main;
+
+            const getWorldSize = () => ({
+                width: scene.scale.width * GameObjects.world.scale,
+                height: scene.scale.height * GameObjects.world.scale
+            });
+
+            // Use Phaser's native bounds clamping instead of manually tracking
+            // scrollX/scrollY by hand. setBounds() is re-checked against the
+            // zoom-adjusted viewport on every render, so the camera can never
+            // show anything outside the world rect -- no matter what moves it
+            // (drag, zoom, keys, or any other code path that touches the
+            // camera later, like a pan/shake/follow you add down the line).
+            const applyBounds = () => {
+                const { width, height } = getWorldSize();
+                cam.setBounds(0, 0, width, height);
+            };
+            applyBounds();
+
+            const worldSize = getWorldSize();
+            cam.centerOn(worldSize.width * 0.5, worldSize.height * 0.5);
 
             // keyboard keys for camera movement
             cameraKeys = scene.input.keyboard.addKeys({
@@ -30,39 +49,18 @@
 
             cursors = scene.input.keyboard.createCursorKeys();
 
-            const cam = scene.cameras.main;
-            cam.setBounds(0, 0, worldWidth, worldHeight);
-            cam.centerOn(worldWidth * 0.5, worldHeight * 0.5);
-
-            // helper to keep scroll within valid range for current zoom
-            const fixScroll = () => {
-                const worldW = scene.scale.width * GameObjects.world.scale;
-                const worldH = scene.scale.height * GameObjects.world.scale;
-                const viewW = cam.width / cam.zoom;
-                const viewH = cam.height / cam.zoom;
-                const maxScrollX = worldW - viewW;
-                const maxScrollY = worldH - viewH;
-                if (maxScrollX <= 0) {
-                    cam.scrollX = maxScrollX / 2; // center horizontally when view larger than world
-                } else {
-                    cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, maxScrollX);
-                }
-                if (maxScrollY <= 0) {
-                    cam.scrollY = maxScrollY / 2; // center vertically when view larger than world
-                } else {
-                    cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, maxScrollY);
-                }
-            };
-
-            // letterbox overlay graphics (screen-space)
+            // letterbox overlay graphics (screen-space) -- purely cosmetic.
+            // It fills the dead space when the viewport shows more than the
+            // world (zoomed out past world size). Bounds-clamping above is
+            // what keeps the *scroll* correct; this only decorates the gap,
+            // it never has to "restrict" anything itself.
             const letterboxG = scene.add.graphics({ x: 0, y: 0 }).setScrollFactor(0).setDepth(1000);
             this.state.letterboxG = letterboxG;
 
             const updateLetterbox = () => {
                 const g = letterboxG;
                 g.clear();
-                const worldW = scene.scale.width * GameObjects.world.scale;
-                const worldH = scene.scale.height * GameObjects.world.scale;
+                const { width: worldW, height: worldH } = getWorldSize();
                 const worldRenderedW = Math.min(worldW * cam.zoom, cam.width);
                 const worldRenderedH = Math.min(worldH * cam.zoom, cam.height);
                 const left = Math.max(0, Math.round((cam.width - worldRenderedW) / 2));
@@ -76,7 +74,6 @@
                 // draw diagonal stripes across full screen
                 g.lineStyle(2, 0x000000, 0.6);
                 const spacing = 18;
-                // draw lines from left-bottom to right-top direction
                 for (let i = -cam.height; i < cam.width + cam.height; i += spacing) {
                     g.beginPath();
                     g.moveTo(i, cam.height);
@@ -92,9 +89,8 @@
                     g.fillRect(left, top, cam.width - left * 2, cam.height - top * 2);
                     g.setBlendMode(Phaser.BlendModes.NORMAL);
                 } else {
-                    // Fallback: draw the world rect filled with transparent color (may not fully erase stripes)
+                    // Fallback: draw letterbox rectangles manually
                     g.clear();
-                    // draw letterbox rectangles manually
                     g.fillStyle(0x2b2b2b, 1);
                     if (left > 0) {
                         g.fillRect(0, 0, left, cam.height);
@@ -104,7 +100,6 @@
                         g.fillRect(left, 0, cam.width - left * 2, top);
                         g.fillRect(left, cam.height - top, cam.width - left * 2, top);
                     }
-                    // draw stripes on those rectangles
                     g.lineStyle(2, 0x000000, 0.6);
                     const areas = [];
                     if (left > 0) areas.push({ x: 0, y: 0, w: left, h: cam.height }, { x: cam.width - left, y: 0, w: left, h: cam.height });
@@ -128,6 +123,15 @@
                     this.state.letterboxG = null;
                 }
             });
+
+            // Recompute bounds whenever the canvas resizes, since world size is
+            // derived from scene.scale.width/height. This is the case the old
+            // code missed entirely: bounds were only ever recalculated
+            // reactively (after a drag/zoom/pan), never on resize, so a resize
+            // could leave the camera looking at stale bounds until the next
+            // interaction happened to fix it.
+            scene.scale.on('resize', applyBounds);
+            scene.events.once('shutdown', () => scene.scale.off('resize', applyBounds));
 
             // Middle-mouse dragging
             scene.input.on('pointerdown', (pointer) => {
@@ -153,14 +157,7 @@
                 const dy = pointer.y - this.state.dragStartY;
                 cam.scrollX = this.state.camStartX - dx / cam.zoom;
                 cam.scrollY = this.state.camStartY - dy / cam.zoom;
-                const worldW = scene.scale.width * GameObjects.world.scale;
-                const worldH = scene.scale.height * GameObjects.world.scale;
-                const viewW = cam.width / cam.zoom;
-                const viewH = cam.height / cam.zoom;
-                const maxScrollX = worldW - viewW;
-                const maxScrollY = worldH - viewH;
-                if (maxScrollX <= 0) cam.scrollX = maxScrollX / 2; else cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, maxScrollX);
-                if (maxScrollY <= 0) cam.scrollY = maxScrollY / 2; else cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, maxScrollY);
+                // no manual clamp needed -- cam.setBounds enforces this every render
             });
 
             // Wheel to zoom (Shift+wheel adjusts gravityMass)
@@ -184,10 +181,8 @@
 
                 if (deltaY > 0) {
                     cam.setZoom(Phaser.Math.Clamp(cam.zoom - this.state.zoomStep, this.state.minZoom, this.state.maxZoom));
-                    fixScroll();
                 } else if (deltaY < 0) {
                     cam.setZoom(Phaser.Math.Clamp(cam.zoom + this.state.zoomStep, this.state.minZoom, this.state.maxZoom));
-                    fixScroll();
                 }
             });
 
@@ -206,7 +201,6 @@
                         }
                     } else {
                         cam.setZoom(Phaser.Math.Clamp(cam.zoom + this.state.zoomStep, this.state.minZoom, this.state.maxZoom));
-                        fixScroll();
                     }
                 } else if (key === '-') {
                     if (event.shiftKey) {
@@ -220,7 +214,6 @@
                         }
                     } else {
                         cam.setZoom(Phaser.Math.Clamp(cam.zoom - this.state.zoomStep, this.state.minZoom, this.state.maxZoom));
-                        fixScroll();
                     }
                 } else if (key === 'ArrowUp') {
                     gravityMass += G;
@@ -250,18 +243,11 @@
             if ((cursors && cursors.down && cursors.down.isDown) || (cameraKeys && cameraKeys.down && cameraKeys.down.isDown)) {
                 camMoveY += 1;
             }
-                if (camMoveX !== 0 || camMoveY !== 0) {
+            if (camMoveX !== 0 || camMoveY !== 0) {
                 const deltaSeconds = Math.max(scene.game.loop.delta, 1) / 1000;
                 cam.scrollX += camMoveX * GameObjects.camera.speed * deltaSeconds;
                 cam.scrollY += camMoveY * GameObjects.camera.speed * deltaSeconds;
-                const worldWidth = scene.scale.width * GameObjects.world.scale;
-                const worldHeight = scene.scale.height * GameObjects.world.scale;
-                const viewW = cam.width / cam.zoom;
-                const viewH = cam.height / cam.zoom;
-                const maxX = worldWidth - viewW;
-                const maxY = worldHeight - viewH;
-                if (maxX <= 0) cam.scrollX = maxX / 2; else cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, maxX);
-                if (maxY <= 0) cam.scrollY = maxY / 2; else cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, maxY);
+                // no manual clamp needed -- cam.setBounds enforces this every render
             }
             // update letterbox overlay if present
             if (this.state && this.state.updateLetterbox) this.state.updateLetterbox();

@@ -16,6 +16,32 @@ const config = {
     },
 };
 
+// Provide a fallback `add.circle` factory when the Phaser build doesn't include it.
+// This creates a small canvas texture for the requested radius/color and returns an Image
+// so physics and tweens work as expected.
+if (typeof Phaser !== 'undefined' && Phaser.GameObjects && Phaser.GameObjects.GameObjectFactory && !Phaser.GameObjects.GameObjectFactory.prototype.circle) {
+    Phaser.GameObjects.GameObjectFactory.prototype.circle = function (x, y, radius, color, alpha) {
+        const scene = this.scene;
+        const colStr = (typeof color === 'number') ? ('#' + ('000000' + color.toString(16)).slice(-6)) : (color || '#ffffff');
+        const texKey = '__circle_' + radius + '_' + colStr.replace('#', '');
+
+        if (!scene.textures.exists(texKey)) {
+            const size = Math.max(2, Math.ceil(radius * 2));
+            const canvas = scene.textures.createCanvas(texKey, size, size);
+            const ctx = canvas.context;
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = colStr;
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, radius, 0, Math.PI * 2);
+            ctx.fill();
+            canvas.refresh();
+        }
+
+        const img = this.image(x, y, texKey);
+        if (alpha !== undefined) img.setAlpha(alpha);
+        return img;
+    };
+}
 
 const game = new Phaser.Game(config);
 
@@ -41,8 +67,10 @@ function preload() { }
 // Planet creation moved to planets.js
 
 function create() {
-    const worldWidth = this.scale.width * GameObjects.world.scale;
-    const worldHeight = this.scale.height * GameObjects.world.scale;
+        let sceneWidth = (this.scale && this.scale.width) ? this.scale.width : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.width) || window.innerWidth,
+          sceneHeight = (this.scale && this.scale.height) ? this.scale.height : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.height) || window.innerHeight,
+          worldWidth = sceneWidth * GameObjects.world.scale,
+          worldHeight = sceneHeight * GameObjects.world.scale;
 
     for (let i = 0; i < GameObjects.world.starCount; i++) {
         const x = Phaser.Math.Between(0, worldWidth);
@@ -260,7 +288,9 @@ function update() {
     // update camera controls
     if (typeof CameraControls !== 'undefined') CameraControls.update(this);
 
-    stepPhysics(allPhysicsEntities, pointer, gravityMass, this.scale.width * GameObjects.world.scale, this.scale.height * GameObjects.world.scale, this.game.loop.delta);
+    const sceneW = (this.scale && this.scale.width) ? this.scale.width : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.width) || window.innerWidth;
+    const sceneH = (this.scale && this.scale.height) ? this.scale.height : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.height) || window.innerHeight;
+    stepPhysics(allPhysicsEntities, pointer, gravityMass, sceneW * GameObjects.world.scale, sceneH * GameObjects.world.scale, this.game.loop.delta);
 
     if (typeof DebugOverlay !== 'undefined') DebugOverlay.update(this);
 

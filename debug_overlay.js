@@ -7,67 +7,83 @@
         },
 
         init: function (scene) {
-            // graphics as a screen-space overlay so border remains visible
-            const g = scene.add.graphics({ x: 0, y: 0 }).setScrollFactor(0).setDepth(2000);
-            this.state.g = g;
-            this.state.thickness = 6;
-            // add a HUD text to display world/camera values
-            const hud = scene.add.text(12, 12, '', {
-                fontFamily: "'Courier New', monospace",
-                fontSize: '12px',
-                color: '#ffffff',
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                padding: { x: 6, y: 4 }
-            }).setScrollFactor(0).setDepth(2001);
+            // Use an HTML overlay for debug text instead of Phaser canvas text.
+            let hud = document.getElementById('debug-overlay');
+            hud.style.height = 'auto';
+            hud.style.width = 'auto';
+            hud.style.background = 'rgba(255, 255, 255, 0.6)';
+            hud.style.position = 'absolute';
+            hud.style.top = '8px';
+            hud.style.left = '8px';
+            let created = false;
+            if (!hud) {
+                hud = document.createElement('div');
+                hud.id = 'debug-overlay';
+                // default styles; user can override in index.html or external CSS
+                hud.style.position = 'absolute';
+                hud.style.top = '8px';
+                hud.style.left = '8px';
+                hud.style.zIndex = 9999;
+                hud.style.color = '#ffffff';
+                hud.style.background = 'rgba(0,0,0,0.6)';
+                hud.style.padding = '6px 8px';
+                hud.style.fontFamily = "'Courier New', monospace";
+                hud.style.fontSize = '12px';
+                hud.style.whiteSpace = 'pre';
+                hud.style.pointerEvents = 'none';
+                document.body.appendChild(hud);
+                created = true;
+            }
+
             this.state.hud = hud;
+            this.state._hudCreated = created;
 
             // cleanup when scene shuts down
             scene.events.once('shutdown', () => {
-                if (this.state.g) {
-                    this.state.g.destroy();
-                    this.state.g = null;
-                }
-                if (this.state.hud) {
-                    this.state.hud.destroy();
+                if (this.state._hudCreated && this.state.hud) {
+                    this.state.hud.remove();
                     this.state.hud = null;
                 }
             });
         },
 
         update: function (scene) {
-            if (!this.state.g) return;
-            const g = this.state.g;
-            g.clear();
             const cam = scene.cameras.main;
-            const worldW = scene.scale.width * GameObjects.world.scale;
-            const worldH = scene.scale.height * GameObjects.world.scale;
+            if (!this.state.hud || !cam) return;
 
-            // compute world rect mapped to screen coordinates
-            const screenX = Math.round((0 - cam.scrollX) * cam.zoom + cam.x);
-            const screenY = Math.round((0 - cam.scrollY) * cam.zoom + cam.y);
-            const screenW = Math.round(worldW * cam.zoom);
-            const screenH = Math.round(worldH * cam.zoom);
+            const worldW = (scene.scale && scene.scale.width ? scene.scale.width : (scene.sys && scene.sys.game && scene.sys.game.config && scene.sys.game.config.width) || window.innerWidth) * GameObjects.world.scale;
+            const worldH = (scene.scale && scene.scale.height ? scene.scale.height : (scene.sys && scene.sys.game && scene.sys.game.config && scene.sys.game.config.height) || window.innerHeight) * GameObjects.world.scale;
 
-            // draw thick white border in screen space so it's always visible
-            g.lineStyle(this.state.thickness, 0xffffff, 1);
-            g.strokeRect(screenX - this.state.thickness / 2, screenY - this.state.thickness / 2, screenW + this.state.thickness, screenH + this.state.thickness);
+            const viewW = cam.width / cam.zoom;
+            const viewH = cam.height / cam.zoom;
+            const maxScrollX = worldW - viewW;
+            const maxScrollY = worldH - viewH;
+            const lines = [
+                `world: ${Math.round(worldW)} x ${Math.round(worldH)}`,
+                `view: ${Math.round(viewW)} x ${Math.round(viewH)} (zoom ${cam.zoom.toFixed(2)})`,
+                `scroll: ${cam.scrollX.toFixed(2)}, ${cam.scrollY.toFixed(2)}`,
+                `maxScroll: ${maxScrollX.toFixed(2)}, ${maxScrollY.toFixed(2)}`
+            ];
 
-            // update HUD with values useful for verifying clamping
-            if (this.state.hud) {
-                const worldW = scene.scale.width * GameObjects.world.scale;
-                const worldH = scene.scale.height * GameObjects.world.scale;
-                const viewW = cam.width / cam.zoom;
-                const viewH = cam.height / cam.zoom;
-                const maxScrollX = worldW - viewW;
-                const maxScrollY = worldH - viewH;
-                const lines = [
-                    `world: ${Math.round(worldW)} x ${Math.round(worldH)}`,
-                    `view: ${Math.round(viewW)} x ${Math.round(viewH)} (zoom ${cam.zoom.toFixed(2)})`,
-                    `scroll: ${cam.scrollX.toFixed(2)}, ${cam.scrollY.toFixed(2)}`,
-                    `maxScroll: ${maxScrollX.toFixed(2)}, ${maxScrollY.toFixed(2)}`
-                ];
-                this.state.hud.setText(lines.join('\n'));
+            // pointer / cursor info
+            const pointer = scene.input.activePointer || {};
+            const canvas = scene.game && scene.game.canvas;
+            let clientPos = '(n/a)';
+            if (canvas && pointer && typeof pointer.event !== 'undefined' && pointer.event) {
+                const rect = canvas.getBoundingClientRect();
+                const cx = (pointer.event.clientX - rect.left).toFixed(0);
+                const cy = (pointer.event.clientY - rect.top).toFixed(0);
+                clientPos = `${cx}, ${cy}`;
             }
+
+            const canvasPos = (typeof pointer.x !== 'undefined' && typeof pointer.y !== 'undefined') ? `${pointer.x.toFixed(0)}, ${pointer.y.toFixed(0)}` : '(n/a)';
+            const worldPos = (typeof pointer.worldX !== 'undefined' && typeof pointer.worldY !== 'undefined') ? `${pointer.worldX.toFixed(0)}, ${pointer.worldY.toFixed(0)}` : '(n/a)';
+
+            lines.push(`pointer(canvas): ${canvasPos}`);
+            lines.push(`pointer(client): ${clientPos}`);
+            lines.push(`pointer(world): ${worldPos}`);
+
+            this.state.hud.innerText = lines.join('\n');
         }
     };
 })();
