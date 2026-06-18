@@ -245,47 +245,87 @@ function create() {
     });
 
     this.input.on("wheel", function (pointer, gameObjects, deltaX, deltaY, deltaZ) {
-        if (deltaY > 0) {
-            gravityMass -= G;
-        } else if (deltaY < 0) {
-            gravityMass += G;
+        const zoomStep = 0.1;
+        const minZoom = 0.2;
+        const maxZoom = 3.0;
+
+        // If Shift is held, preserve original behavior: change gravity mass
+        const event = pointer.event || {};
+        if (event.shiftKey) {
+            if (deltaY > 0) {
+                gravityMass -= G;
+            } else if (deltaY < 0) {
+                gravityMass += G;
+            }
+            gravityMass = Phaser.Math.Clamp(gravityMass, -500000000, 500000000);
+
+            massText.setText("Black Hole Mass: " + gravityMass);
+
+            if (gravityMass > 0) {
+                massText.setFill("#00ffff");
+            } else if (gravityMass < 0) {
+                massText.setFill("#ff4500");
+            } else {
+                massText.setFill("#00ff00");
+            }
+            return;
         }
-        gravityMass = Phaser.Math.Clamp(gravityMass, -500000000, 500000000);
 
-        massText.setText("Black Hole Mass: " + gravityMass);
-
-        if (gravityMass > 0) {
-            massText.setFill("#00ffff");
-        } else if (gravityMass < 0) {
-            massText.setFill("#ff4500");
-        } else {
-            massText.setFill("#00ff00");
+        // Default: use wheel to zoom camera
+        if (deltaY > 0) {
+            cam.setZoom(Phaser.Math.Clamp(cam.zoom - zoomStep, minZoom, maxZoom));
+        } else if (deltaY < 0) {
+            cam.setZoom(Phaser.Math.Clamp(cam.zoom + zoomStep, minZoom, maxZoom));
         }
     });
 
     this.input.keyboard.on('keydown', function (event) {
+        const zoomStep = 0.1;
+        const minZoom = 0.2;
+        const maxZoom = 3.0;
+
         if (event.key === 'ArrowUp') {
             gravityMass += G;
         } else if (event.key === 'ArrowDown') {
             gravityMass -= G;
         } else if (event.key === '+' || event.key === '=') {
-            gravityMass += G;
+            // If Shift is held, adjust gravity mass (legacy); otherwise zoom in
+            if (event.shiftKey) {
+                gravityMass += G;
+                gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
+                massText.setText("Black Hole Mass: " + gravityMass);
+                if (gravityMass > 0) {
+                    massText.setFill("#00ffff");
+                } else if (gravityMass < 0) {
+                    massText.setFill("#ff4500");
+                } else {
+                    massText.setFill("#00ff00");
+                }
+            } else {
+                cam.setZoom(Phaser.Math.Clamp(cam.zoom + zoomStep, minZoom, maxZoom));
+            }
         } else if (event.key === '-') {
-            gravityMass -= G;
+            if (event.shiftKey) {
+                gravityMass -= G;
+                gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
+                massText.setText("Black Hole Mass: " + gravityMass);
+                if (gravityMass > 0) {
+                    massText.setFill("#00ffff");
+                } else if (gravityMass < 0) {
+                    massText.setFill("#ff4500");
+                } else {
+                    massText.setFill("#00ff00");
+                }
+            } else {
+                cam.setZoom(Phaser.Math.Clamp(cam.zoom - zoomStep, minZoom, maxZoom));
+            }
         } else if (event.key === '0') {
             gravityMass = 0;
+            gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
+            massText.setText("Black Hole Mass: " + gravityMass);
+            massText.setFill("#00ff00");
         } else {
             return;
-        }
-
-        gravityMass = Phaser.Math.Clamp(gravityMass, -5000000, 5000000);
-        massText.setText("Black Hole Mass: " + gravityMass);
-        if (gravityMass > 0) {
-            massText.setFill("#00ffff");
-        } else if (gravityMass < 0) {
-            massText.setFill("#ff4500");
-        } else {
-            massText.setFill("#00ff00");
         }
     }, this);
 
