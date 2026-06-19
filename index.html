@@ -12,21 +12,126 @@
     <script src="game.js"></script>
     <!-- Debug overlay (uncomment to enable debug borders) -->
     <script src="debug_overlay.js"></script>
-    <style>
-      body {
-        margin: 0;
-        background-color: #333;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-      }
-    </style>
+    <style src="gamestyles.css"></style>
   </head>
   <body>
     <!-- Game scripts loaded in head so opening the file directly works -->
     <div style="position: relative; width: 100%; height: 100%;" id="game-container" >
       <div id="debug-overlay" style="position: absolute; top: 10; left: 10; pointer-events: none;"></div>
     </div>
+    <!-- Start menu shown before the game starts -->
+    <div id="start-menu" role="dialog" aria-label="Start menu">
+      <div class="menu-inner">
+        <div class="title">Space Minotaur</div>
+        <div class="subtitle">A tiny space playground — choose an option</div>
+        <button id="start-play" class="start-button play">Play</button>
+        <button id="start-settings-btn" class="start-button settings">Settings</button>
+        <button id="start-exit" class="start-button exit">Exit</button>
+        <div id="start-settings">
+          <label for="real-players">Number of real players</label>
+          <input id="real-players" type="number" min="1" max="16" value="1" />
+        </div>
+      </div>
+    </div>
+    <!-- HTML layer main menu / pause overlay -->
+    <div id="main-menu" role="dialog" aria-hidden="true" aria-label="Main menu">
+      <div class="menu-inner">
+        <h2 style="margin:0 0 12px 0;">Paused</h2>
+        <div style="margin-bottom:12px; font-size:14px; color:#9fb0c8">Press Esc to resume</div>
+        <button id="menu-resume">Resume</button>
+        <button id="menu-restart">Restart</button>
+        <button id="menu-settings">Settings</button>
+        <button id="menu-exit" style="background:#b91c1c; color:#fff;">Exit to Main Menu</button>
+      </div>
+    </div>
+    <!-- Confirmation modal used for restart/exit actions -->
+    <div id="confirm-modal" role="dialog" aria-hidden="true" style="display:none; position:fixed; inset:0; z-index:110000; align-items:center; justify-content:center; background: rgba(0,0,0,0.6);">
+      <div style="background:#071018; color:#e6eef8; padding:18px; border-radius:10px; min-width:260px; text-align:center;">
+        <div id="confirm-message" style="margin-bottom:12px;">Are you sure?</div>
+        <div style="display:flex; gap:8px; justify-content:center;">
+          <button id="confirm-yes" style="padding:8px 12px; background:#10b981; border:none; border-radius:6px; color:#042018; cursor:pointer;">Yes</button>
+          <button id="confirm-no" style="padding:8px 12px; background:#374151; border:none; border-radius:6px; color:#e6eef8; cursor:pointer;">No</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Change this URL to whichever site you want Exit to redirect to.
+      const EXIT_URL = 'https://ballsfactory.net';
+
+      // Settings stored here
+      window.GAME_SETTINGS = window.GAME_SETTINGS || { realPlayers: Number(localStorage.getItem('realPlayers') || 1) };
+
+      function showStartSettings(show) {
+        const el = document.getElementById('start-settings');
+        if (!el) return;
+        el.style.display = show ? 'block' : 'none';
+      }
+
+      document.getElementById('start-settings-btn').addEventListener('click', function () {
+        const el = document.getElementById('start-settings');
+        const visible = el.style.display === 'block';
+        showStartSettings(!visible);
+        // populate input
+        document.getElementById('real-players').value = window.GAME_SETTINGS.realPlayers;
+      });
+
+      document.getElementById('real-players').addEventListener('change', function (e) {
+        const v = Number(e.target.value) || 1;
+        window.GAME_SETTINGS.realPlayers = Math.max(1, Math.min(16, v));
+        localStorage.setItem('realPlayers', window.GAME_SETTINGS.realPlayers);
+      });
+
+      document.getElementById('start-play').addEventListener('click', function () {
+        // hide start menu, start the Phaser game
+        document.getElementById('start-menu').style.display = 'none';
+        // ensure settings panel hidden
+        showStartSettings(false);
+        // call startGame exposed by game.js
+        if (window.startGame) {
+          window.startGame();
+          // focus the canvas if present
+          setTimeout(() => { const c = document.querySelector('canvas'); if (c) c.focus(); }, 200);
+        } else {
+          console.warn('startGame() not found');
+        }
+      });
+
+      document.getElementById('start-exit').addEventListener('click', function () {
+        window.location.href = EXIT_URL;
+      });
+
+      // Initialize settings UI visibility
+      showStartSettings(false);
+      // Confirmation modal helpers
+      window.showConfirm = function (message, onConfirm) {
+        const modal = document.getElementById('confirm-modal');
+        const msg = document.getElementById('confirm-message');
+        const yes = document.getElementById('confirm-yes');
+        const no = document.getElementById('confirm-no');
+        if (!modal || !msg || !yes || !no) return;
+        msg.textContent = message || 'Are you sure?';
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+
+        const cleanup = () => {
+          modal.style.display = 'none';
+          modal.setAttribute('aria-hidden', 'true');
+          yes.removeEventListener('click', onYes);
+          no.removeEventListener('click', onNo);
+          document.removeEventListener('keydown', onKey);
+        };
+
+        function onYes() {
+          cleanup();
+          if (typeof onConfirm === 'function') onConfirm();
+        }
+        function onNo() { cleanup(); }
+        function onKey(e) { if (e.key === 'Escape') onNo(); }
+
+        yes.addEventListener('click', onYes);
+        no.addEventListener('click', onNo);
+        document.addEventListener('keydown', onKey);
+      };
+    </script>
   </body>
 </html>

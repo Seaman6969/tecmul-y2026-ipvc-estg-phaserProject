@@ -58,7 +58,12 @@
             const viewH = cam.height / cam.zoom;
             const maxScrollX = worldW - viewW;
             const maxScrollY = worldH - viewH;
+            // FPS / timing
+            const loop = scene.game && scene.game.loop;
+            const fpsVal = loop && loop.actualFps ? loop.actualFps : (loop && loop.delta ? (1000 / loop.delta) : 0);
+            const msPerFrame = loop && loop.delta ? loop.delta.toFixed(1) : '0.0';
             const lines = [
+                `fps: ${fpsVal.toFixed ? fpsVal.toFixed(1) : Number(fpsVal).toFixed(1)} (${msPerFrame} ms)` ,
                 `world: ${Math.round(worldW)} x ${Math.round(worldH)}`,
                 `view: ${Math.round(viewW)} x ${Math.round(viewH)} (zoom ${cam.zoom.toFixed(2)})`,
                 `scroll: ${cam.scrollX.toFixed(2)}, ${cam.scrollY.toFixed(2)}`,

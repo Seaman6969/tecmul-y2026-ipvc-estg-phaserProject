@@ -43,7 +43,28 @@ if (typeof Phaser !== 'undefined' && Phaser.GameObjects && Phaser.GameObjects.Ga
     };
 }
 
-const game = new Phaser.Game(config);
+// Defer creating the Phaser.Game until the user presses Play from the HTML start menu.
+let game = null;
+function startGame() {
+    if (game) return game;
+    game = new Phaser.Game(config);
+    return game;
+}
+window.startGame = startGame;
+function stopGame() {
+    try {
+        if (window.__phaserScene && window.__phaserScene.scene) {
+            try { window.__phaserScene.scene.stop(); } catch (e) {}
+        }
+        if (game) {
+            try { game.destroy(true); } catch (e) { }
+        }
+    } finally {
+        game = null;
+        window.__phaserScene = null;
+    }
+}
+window.stopGame = stopGame;
 
 let planet;
 let cursors;
@@ -225,7 +246,37 @@ function create() {
     // optional debug overlay
     if (typeof DebugOverlay !== 'undefined') DebugOverlay.init(this);
 
+    // Responsive resize: adapt canvas, scale and camera to window size changes
+    const onResize = () => {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        if (this.scale && this.scale.resize) this.scale.resize(w, h);
+        if (this.game && this.game.canvas) {
+            this.game.canvas.style.width = w + 'px';
+            this.game.canvas.style.height = h + 'px';
+        }
+        // adjust main camera viewport and size
+        if (this.cameras && this.cameras.main) {
+            try {
+                this.cameras.main.setViewport(0, 0, w, h);
+            } catch (e) { /* ignore if not supported */ }
+            try {
+                this.cameras.main.setSize(w, h);
+            } catch (e) { /* ignore if not supported */ }
+        }
+        // update auxiliary overlays
+        if (typeof CameraControls !== 'undefined' && CameraControls.state && CameraControls.state.updateLetterbox) {
+            CameraControls.state.updateLetterbox();
+        }
+        if (typeof DebugOverlay !== 'undefined') DebugOverlay.update(this);
+    };
+    window.addEventListener('resize', onResize, { passive: true });
+    // remove listener when scene shuts down
+    this.events.once('shutdown', () => window.removeEventListener('resize', onResize));
+
     blackHoleGraphic = this.add.graphics();
+    // initialize HTML menu handlers (for pause / main menu)
+    if (typeof initHtmlMenu === 'function') initHtmlMenu(this);
 }
 
 function updateOrbitingBodies(allPhysicsEntities, delta) {
@@ -244,6 +295,116 @@ function updateOrbitingBodies(allPhysicsEntities, delta) {
             entity.body.y = entity.y - entity.radius;
         }
     });
+}
+
+// --- HTML menu / pause helpers ---
+function initHtmlMenu(scene) {
+    try {
+        // update scene reference
+        window.__phaserScene = scene;
+
+        // remove previous handlers if present
+        if (window.__menuHandlers) {
+            const prev = window.__menuHandlers;
+            try {
+                if (prev.key) window.removeEventListener('keydown', prev.key);
+                if (prev.resume && document.getElementById('menu-resume')) document.getElementById('menu-resume').removeEventListener('click', prev.resume);
+                if (prev.restart && document.getElementById('menu-restart')) document.getElementById('menu-restart').removeEventListener('click', prev.restart);
+                if (prev.settings && document.getElementById('menu-settings')) document.getElementById('menu-settings').removeEventListener('click', prev.settings);
+                if (prev.exit && document.getElementById('menu-exit')) document.getElementById('menu-exit').removeEventListener('click', prev.exit);
+            } catch (e) { /* ignore */ }
+        }
+
+        const init = () => {
+            const menu = document.getElementById('main-menu');
+            if (!menu) return;
+
+            const resumeBtn = document.getElementById('menu-resume');
+            const restartBtn = document.getElementById('menu-restart');
+            const settingsBtn = document.getElementById('menu-settings');
+            const exitBtn = document.getElementById('menu-exit');
+
+            const onResume = () => closeMenu();
+            const onRestart = () => {
+                if (window.showConfirm) {
+                    window.showConfirm('Are you sure you want to restart the game?', () => {
+                        closeMenu();
+                        try { window.stopGame(); } catch (e) {}
+                        setTimeout(() => { if (window.startGame) window.startGame(); }, 50);
+                    });
+                } else {
+                    closeMenu();
+                    try { window.location.reload(); } catch (e) {}
+                }
+            };
+            const onSettings = () => { alert('No settings available yet.'); };
+            const onExit = () => {
+                if (window.showConfirm) {
+                    window.showConfirm('Return to the main menu? Unsaved progress will be lost.', () => {
+                        closeMenu();
+                        try { window.stopGame(); } catch (e) {}
+                        const sm = document.getElementById('start-menu');
+                        if (sm) sm.style.display = 'flex';
+                    });
+                } else {
+                    closeMenu();
+                    try { window.stopGame(); } catch (e) {}
+                    const sm = document.getElementById('start-menu');
+                    if (sm) sm.style.display = 'flex';
+                }
+            };
+
+            if (resumeBtn) resumeBtn.addEventListener('click', onResume);
+            if (restartBtn) restartBtn.addEventListener('click', onRestart);
+            if (settingsBtn) settingsBtn.addEventListener('click', onSettings);
+            if (exitBtn) exitBtn.addEventListener('click', onExit);
+
+            const onKey = (e) => { if (e.key === 'Escape') toggleMenu(); };
+            window.addEventListener('keydown', onKey);
+
+            window.__menuHandlers = { key: onKey, resume: onResume, restart: onRestart, settings: onSettings, exit: onExit };
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    } catch (err) {
+        console.warn('initHtmlMenu failed', err);
+    }
+}
+
+function openMenu() {
+    const menu = document.getElementById('main-menu');
+    if (!menu) return;
+    menu.style.display = 'flex';
+    menu.setAttribute('aria-hidden', 'false');
+    try {
+        if (window.__phaserScene && window.__phaserScene.scene && window.__phaserScene.scene.pause) window.__phaserScene.scene.pause();
+        if (window.__phaserScene && window.__phaserScene.sound && window.__phaserScene.sound.pauseAll) window.__phaserScene.sound.pauseAll();
+        const canvas = document.querySelector('canvas');
+        if (canvas) canvas.style.pointerEvents = 'none';
+    } catch (e) { /* ignore */ }
+}
+
+function closeMenu() {
+    const menu = document.getElementById('main-menu');
+    if (!menu) return;
+    menu.style.display = 'none';
+    menu.setAttribute('aria-hidden', 'true');
+    try {
+        if (window.__phaserScene && window.__phaserScene.scene && window.__phaserScene.scene.resume) window.__phaserScene.scene.resume();
+        if (window.__phaserScene && window.__phaserScene.sound && window.__phaserScene.sound.resumeAll) window.__phaserScene.sound.resumeAll();
+        const canvas = document.querySelector('canvas');
+        if (canvas) canvas.style.pointerEvents = '';
+    } catch (e) { /* ignore */ }
+}
+
+function toggleMenu() {
+    const menu = document.getElementById('main-menu');
+    if (!menu) return;
+    if (menu.style.display === 'flex') closeMenu(); else openMenu();
 }
 
 function update() {
