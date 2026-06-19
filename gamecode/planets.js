@@ -11,9 +11,10 @@ function createPlanet(scene, x, y, radius, color) {
   circle.body.setDrag(0, 0);
   
   circle.radius = radius;
-  circle.body.mass = radius * radius * 4;
+  // mass proportional to volume ~ radius^3 so larger planets have stronger gravity
+  circle.body.mass = Math.pow(radius, 3);
   circle.physics = {
-    mass: radius * radius * 4,
+    mass: Math.pow(radius, 3),
     attractsOthers: true,
     speed: { x: 0, y: 0 },
     immovable: true
@@ -57,9 +58,10 @@ function createFixedPlanet(scene, x, y, radius, color) {
   circle.body.setDrag(0, 0);
 
   circle.radius = radius;
-  circle.body.mass = radius * radius * 4;
+  // mass proportional to volume ~ radius^3
+  circle.body.mass = Math.pow(radius, 3);
   circle.physics = {
-    mass: radius * radius * 4,
+    mass: Math.pow(radius, 3),
     attractsOthers: true,
     speed: { x: 0, y: 0 },
     immovable: true
@@ -77,6 +79,23 @@ function createFixedPlanet(scene, x, y, radius, color) {
 }
 
 function createOrbitingPlanet(scene, centerPlanet, orbitRadius, radius, color, angularSpeed, startAngle = 0) {
+  // helper: compute angular speed based on orbit radius so more distant planets orbit slower
+  function angularSpeedForRadius(orbitRadius, baseAngular) {
+    // reference radius used to normalize speeds (tweakable)
+    const REF = 1000;
+    // min/max angular speeds (radians per second)
+    const MIN = 0.01;
+    const MAX = 0.12;
+    // scale factor: sqrt(reference / orbitRadius) -> farther -> smaller
+    const scale = Math.sqrt(Math.max(1, REF) / Math.max(1, orbitRadius));
+    if (baseAngular === undefined || baseAngular === null) {
+      // compute default within min/max
+      const val = MAX * scale;
+      return Math.max(MIN, Math.min(MAX, val));
+    }
+    // scale provided angular speed so it respects distance
+    return Math.max(MIN, Math.min(MAX, baseAngular * scale));
+  }
   const x = centerPlanet.x + Math.cos(startAngle) * orbitRadius;
   const y = centerPlanet.y + Math.sin(startAngle) * orbitRadius;
   const circle = scene.add.circle(x, y, radius, color);
@@ -91,9 +110,12 @@ function createOrbitingPlanet(scene, centerPlanet, orbitRadius, radius, color, a
   circle.body.setDrag(0, 0);
 
   circle.radius = radius;
-  circle.body.mass = radius * radius * 2;
+  // mass proportional to volume ~ radius^3
+  circle.body.mass = Math.pow(radius, 3);
+  // compute angular speed based on radius (scales provided value if present)
+  const computedAngular = angularSpeedForRadius(orbitRadius, angularSpeed);
   circle.physics = {
-    mass: radius * radius * 2,
+    mass: Math.pow(radius, 3),
     attractsOthers: true,
     speed: { x: 0, y: 0 },
     immovable: true,
@@ -101,7 +123,7 @@ function createOrbitingPlanet(scene, centerPlanet, orbitRadius, radius, color, a
       center: centerPlanet,
       radius: orbitRadius,
       angle: startAngle,
-      angularSpeed: angularSpeed
+      angularSpeed: computedAngular
     }
   };
 

@@ -6,9 +6,9 @@
 window.GameObjects = {
   world: {
     // World is scaled larger than the viewport so the camera can pan.
-    scale: 8,
+    scale: 16,
     // The number of background stars in the scene.
-    starCount: 300,
+    starCount: 100,
     // The virtual world size will be computed from the viewport size.
   },
 
@@ -48,7 +48,7 @@ window.GameObjects = {
   // --- Orbital system definitions ---
   orbitalSystem: {
     centerPlanet: {
-      radius: 400,
+      radius: 200,
       color: 0x00ffff,
     },
     orbiters: [

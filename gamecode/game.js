@@ -17,8 +17,6 @@ const config = {
 };
 
 // Provide a fallback `add.circle` factory when the Phaser build doesn't include it.
-// This creates a small canvas texture for the requested radius/color and returns an Image
-// so physics and tweens work as expected.
 if (typeof Phaser !== 'undefined' && Phaser.GameObjects && Phaser.GameObjects.GameObjectFactory && !Phaser.GameObjects.GameObjectFactory.prototype.circle) {
     Phaser.GameObjects.GameObjectFactory.prototype.circle = function (x, y, radius, color, alpha) {
         const scene = this.scene;
@@ -66,32 +64,22 @@ function stopGame() {
 }
 window.stopGame = stopGame;
 
-let planet;
 let cursors;
 let cameraKeys;
 let gravityMass = 0;
-let massText;
-let statusText;
 let nonPlayerCircles;
 let fixedPlanets;
 let physicsEntities;
-let blackHoleGraphic;
 let rd = 150;
 let G = 2000;
 
-const N = 0;
-
 function preload() { }
 
-// Collision resolution and physics step are in physics.js
-
-// Planet creation moved to planets.js
-
 function create() {
-        let sceneWidth = (this.scale && this.scale.width) ? this.scale.width : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.width) || window.innerWidth,
-          sceneHeight = (this.scale && this.scale.height) ? this.scale.height : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.height) || window.innerHeight,
-          worldWidth = sceneWidth * GameObjects.world.scale,
-          worldHeight = sceneHeight * GameObjects.world.scale;
+    let sceneWidth = (this.scale && this.scale.width) ? this.scale.width : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.width) || window.innerWidth,
+        sceneHeight = (this.scale && this.scale.height) ? this.scale.height : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.height) || window.innerHeight,
+        worldWidth = sceneWidth * GameObjects.world.scale,
+        worldHeight = sceneHeight * GameObjects.world.scale;
 
     for (let i = 0; i < GameObjects.world.starCount; i++) {
         const x = Phaser.Math.Between(0, worldWidth);
@@ -124,7 +112,6 @@ function create() {
     nonPlayerCircles = this.physics.add.group();
     fixedPlanets = [];
     physicsEntities = [];
-    // Camera setup moved to camera.js
 
     const centerPlanet = createFixedPlanet(
         this,
@@ -139,111 +126,18 @@ function create() {
         createOrbitingPlanet(this, centerPlanet, data.orbitRadius, data.radius, data.color, data.angularSpeed, data.startAngle);
     });
 
-    planet = this.add.circle(400, 300, 20, 0xff0000);
-    this.physics.add.existing(planet);
-    planet.body.setCircle(20);
-    planet.body.setCollideWorldBounds(false);
-    planet.body.setBounce(0, 0);
-    planet.body.setDrag(0, 0);
-    planet.radius = 20;
-    planet.body.mass = 20 * 20;
-    planet.physics = {
-        mass: 20 * 20,
-        attractsOthers: true,
-        speed: {
-            x: Phaser.Math.Between(-60, 60),
-            y: Phaser.Math.Between(-60, 60)
-        }
-    };
-    planet.body.setVelocity(planet.physics.speed.x, planet.physics.speed.y);
-
-    this.add.particles(0, 0, 'trail_particle', {
-        speed: 0,
-        lifespan: 300,
-        scale: { start: 0.8, end: 0 },
-        alpha: { start: 0.4, end: 0 },
-        blendMode: 'ADD',
-        follow: planet,
-        tint: 0xff0000
-    });
-
-    nonPlayerCircles.add(planet);
-    physicsEntities.push(planet);
+    // initialize the optional debug overlay from debug_overlay.js
+    try {
+        if (typeof initDebugOverlay === 'function') initDebugOverlay(this, { nonPlayerCircles, physicsEntities });
+    } catch (e) { /* ignore */ }
 
     this.physics.add.collider(nonPlayerCircles, nonPlayerCircles, resolveElasticCollision);
 
-    massText = this.add.text(20, 20, "Black Hole Mass: " + gravityMass, {
-        fontFamily: "'Outfit', 'Courier New', sans-serif",
-        fontSize: "18px",
-        fill: "#00ff00",
-        fontStyle: "bold"
-    });
-
-    // Allow clicking the mass text to edit it directly
-    massText.setInteractive({ useHandCursor: true });
     const scene = this;
-    massText.on('pointerdown', function () {
-        // prevent multiple inputs
-        if (document.getElementById('mass-input')) return;
-
-        const canvasRect = scene.game.canvas.getBoundingClientRect();
-        const input = document.createElement('input');
-        input.id = 'mass-input';
-        input.type = 'text';
-        input.value = gravityMass;
-        input.style.position = 'absolute';
-        input.style.left = (canvasRect.left + massText.x) + 'px';
-        input.style.top = (canvasRect.top + massText.y) + 'px';
-        input.style.zIndex = 10000;
-        input.style.background = 'rgba(0,0,0,0.8)';
-        input.style.color = '#00ff00';
-        input.style.border = '1px solid #00ff00';
-        input.style.font = '16px "Outfit", "Courier New", sans-serif';
-        input.style.padding = '2px 6px';
-        input.style.outline = 'none';
-        document.body.appendChild(input);
-        input.focus();
-        input.select();
-
-        function commit() {
-            const v = Number(input.value);
-            if (!isNaN(v)) {
-                gravityMass = v;
-            }
-            gravityMass = Phaser.Math.Clamp(gravityMass, -500000000, 500000000);
-            massText.setText("Black Hole Mass: " + gravityMass);
-            if (gravityMass > 0) {
-                massText.setFill("#00ffff");
-            } else if (gravityMass < 0) {
-                massText.setFill("#ff4500");
-            } else {
-                massText.setFill("#00ff00");
-            }
-            input.remove();
-        }
-
-        input.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                commit();
-            } else if (e.key === 'Escape') {
-                input.remove();
-            }
-        });
-
-        input.addEventListener('blur', function () {
-            commit();
-        });
-    });
-
-    statusText = this.add.text(20, 45, "Status: Inactive (Click and hold to activate)", {
-        fontFamily: "'Outfit', 'Courier New', sans-serif",
-        fontSize: "12px",
-        fill: "#8fa0c0"
-    });
 
     // initialize camera controls (center, drag, zoom, keys)
     if (typeof CameraControls !== 'undefined') CameraControls.init(this);
-    // optional debug overlay
+    // optional debug overlay (library-style)
     if (typeof DebugOverlay !== 'undefined') DebugOverlay.init(this);
 
     // Responsive resize: adapt canvas, scale and camera to window size changes
@@ -255,26 +149,18 @@ function create() {
             this.game.canvas.style.width = w + 'px';
             this.game.canvas.style.height = h + 'px';
         }
-        // adjust main camera viewport and size
         if (this.cameras && this.cameras.main) {
-            try {
-                this.cameras.main.setViewport(0, 0, w, h);
-            } catch (e) { /* ignore if not supported */ }
-            try {
-                this.cameras.main.setSize(w, h);
-            } catch (e) { /* ignore if not supported */ }
+            try { this.cameras.main.setViewport(0, 0, w, h); } catch (e) { }
+            try { this.cameras.main.setSize(w, h); } catch (e) { }
         }
-        // update auxiliary overlays
         if (typeof CameraControls !== 'undefined' && CameraControls.state && CameraControls.state.updateLetterbox) {
             CameraControls.state.updateLetterbox();
         }
         if (typeof DebugOverlay !== 'undefined') DebugOverlay.update(this);
     };
     window.addEventListener('resize', onResize, { passive: true });
-    // remove listener when scene shuts down
     this.events.once('shutdown', () => window.removeEventListener('resize', onResize));
 
-    blackHoleGraphic = this.add.graphics();
     // initialize HTML menu handlers (for pause / main menu)
     if (typeof initHtmlMenu === 'function') initHtmlMenu(this);
 }
@@ -300,10 +186,8 @@ function updateOrbitingBodies(allPhysicsEntities, delta) {
 // --- HTML menu / pause helpers ---
 function initHtmlMenu(scene) {
     try {
-        // update scene reference
         window.__phaserScene = scene;
 
-        // remove previous handlers if present
         if (window.__menuHandlers) {
             const prev = window.__menuHandlers;
             try {
@@ -312,7 +196,7 @@ function initHtmlMenu(scene) {
                 if (prev.restart && document.getElementById('menu-restart')) document.getElementById('menu-restart').removeEventListener('click', prev.restart);
                 if (prev.settings && document.getElementById('menu-settings')) document.getElementById('menu-settings').removeEventListener('click', prev.settings);
                 if (prev.exit && document.getElementById('menu-exit')) document.getElementById('menu-exit').removeEventListener('click', prev.exit);
-            } catch (e) { /* ignore */ }
+            } catch (e) { }
         }
 
         const init = () => {
@@ -385,7 +269,7 @@ function openMenu() {
         if (window.__phaserScene && window.__phaserScene.sound && window.__phaserScene.sound.pauseAll) window.__phaserScene.sound.pauseAll();
         const canvas = document.querySelector('canvas');
         if (canvas) canvas.style.pointerEvents = 'none';
-    } catch (e) { /* ignore */ }
+    } catch (e) { }
 }
 
 function closeMenu() {
@@ -398,7 +282,7 @@ function closeMenu() {
         if (window.__phaserScene && window.__phaserScene.sound && window.__phaserScene.sound.resumeAll) window.__phaserScene.sound.resumeAll();
         const canvas = document.querySelector('canvas');
         if (canvas) canvas.style.pointerEvents = '';
-    } catch (e) { /* ignore */ }
+    } catch (e) { }
 }
 
 function toggleMenu() {
@@ -409,49 +293,19 @@ function toggleMenu() {
 
 function update() {
     const pointer = this.input.activePointer;
-    blackHoleGraphic.clear();
-
-    if (pointer.leftButtonDown()) {
-        statusText.setText("Status: ACTIVE (Gravity Source online)");
-        statusText.setFill("#00ff88");
-        const absMass = Math.abs(gravityMass);
-        const baseRadius = Phaser.Math.Clamp(absMass / 40000, 6, 65);
-        const pulse = 1 + 0.15 * Math.sin(this.time.now / 120);
-        const glowRadius = baseRadius * pulse;
-
-        if (gravityMass >= 0) {
-            blackHoleGraphic.fillStyle(0x8a2be2, 0.25);
-            blackHoleGraphic.fillCircle(pointer.x, pointer.y, glowRadius * 2.2);
-            blackHoleGraphic.fillStyle(0x0000ff, 0.45);
-            blackHoleGraphic.fillCircle(pointer.x, pointer.y, glowRadius * 1.4);
-            blackHoleGraphic.lineStyle(2, 0x00ffff, 0.85);
-            blackHoleGraphic.strokeCircle(pointer.x, pointer.y, glowRadius);
-            blackHoleGraphic.fillStyle(0x000000, 1.0);
-            blackHoleGraphic.fillCircle(pointer.x, pointer.y, baseRadius * 0.7);
-        } else {
-            blackHoleGraphic.fillStyle(0xff4500, 0.25);
-            blackHoleGraphic.fillCircle(pointer.x, pointer.y, glowRadius * 2.2);
-            blackHoleGraphic.fillStyle(0xff8c00, 0.45);
-            blackHoleGraphic.fillCircle(pointer.x, pointer.y, glowRadius * 1.4);
-            blackHoleGraphic.lineStyle(2, 0xffffff, 0.85);
-            blackHoleGraphic.strokeCircle(pointer.x, pointer.y, glowRadius);
-            blackHoleGraphic.fillStyle(0xffffff, 1.0);
-            blackHoleGraphic.fillCircle(pointer.x, pointer.y, baseRadius * 0.7);
-        }
-    } else {
-        statusText.setText("Status: Inactive (Click and hold to activate)");
-        statusText.setFill("#8fa0c0");
-    }
+    // gravity UI removed; pointer-driven temporary gravity is disabled by default
 
     const allPhysicsEntities = physicsEntities.filter(entity => entity && entity.physics);
     updateOrbitingBodies(allPhysicsEntities, this.game.loop.delta);
 
-    // update camera controls
     if (typeof CameraControls !== 'undefined') CameraControls.update(this);
 
     const sceneW = (this.scale && this.scale.width) ? this.scale.width : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.width) || window.innerWidth;
     const sceneH = (this.scale && this.scale.height) ? this.scale.height : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.height) || window.innerHeight;
     stepPhysics(allPhysicsEntities, pointer, gravityMass, sceneW * GameObjects.world.scale, sceneH * GameObjects.world.scale, this.game.loop.delta);
+
+    // update debug overlay (movable test planet)
+    if (typeof updateDebugOverlay === 'function') updateDebugOverlay(this, this.game.loop.delta);
 
     if (typeof DebugOverlay !== 'undefined') DebugOverlay.update(this);
 
