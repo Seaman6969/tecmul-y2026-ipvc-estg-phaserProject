@@ -1,5 +1,6 @@
 const config = {
     type: Phaser.AUTO,
+    parent: 'game-container',
     width: window.innerWidth,
     height: window.innerHeight,
     backgroundColor: "#030308",
@@ -15,31 +16,6 @@ const config = {
         update: update,
     },
 };
-
-// Provide a fallback `add.circle` factory when the Phaser build doesn't include it.
-if (typeof Phaser !== 'undefined' && Phaser.GameObjects && Phaser.GameObjects.GameObjectFactory && !Phaser.GameObjects.GameObjectFactory.prototype.circle) {
-    Phaser.GameObjects.GameObjectFactory.prototype.circle = function (x, y, radius, color, alpha) {
-        const scene = this.scene;
-        const colStr = (typeof color === 'number') ? ('#' + ('000000' + color.toString(16)).slice(-6)) : (color || '#ffffff');
-        const texKey = '__circle_' + radius + '_' + colStr.replace('#', '');
-
-        if (!scene.textures.exists(texKey)) {
-            const size = Math.max(2, Math.ceil(radius * 2));
-            const canvas = scene.textures.createCanvas(texKey, size, size);
-            const ctx = canvas.context;
-            ctx.clearRect(0, 0, size, size);
-            ctx.fillStyle = colStr;
-            ctx.beginPath();
-            ctx.arc(size / 2, size / 2, radius, 0, Math.PI * 2);
-            ctx.fill();
-            canvas.refresh();
-        }
-
-        const img = this.image(x, y, texKey);
-        if (alpha !== undefined) img.setAlpha(alpha);
-        return img;
-    };
-}
 
 // Defer creating the Phaser.Game until the user presses Play from the HTML start menu.
 let game = null;
@@ -60,6 +36,7 @@ function stopGame() {
     } finally {
         game = null;
         window.__phaserScene = null;
+        try { if (window.showEndTurnButton) window.showEndTurnButton(false); } catch (e) { }
     }
 }
 window.stopGame = stopGame;
@@ -130,6 +107,9 @@ function create() {
     try {
         if (typeof initDebugOverlay === 'function') initDebugOverlay(this, { nonPlayerCircles, physicsEntities });
     } catch (e) { /* ignore */ }
+
+    // init TurnManager if available
+    try { if (window.TurnManager && typeof window.TurnManager.init === 'function') window.TurnManager.init(this); } catch (e) { /* ignore */ }
 
     this.physics.add.collider(nonPlayerCircles, nonPlayerCircles, resolveElasticCollision);
 
@@ -214,7 +194,7 @@ function initHtmlMenu(scene) {
                     window.showConfirm('Are you sure you want to restart the game?', () => {
                         closeMenu();
                         try { window.stopGame(); } catch (e) {}
-                        setTimeout(() => { if (window.startGame) window.startGame(); }, 50);
+                        setTimeout(() => { if (window.startGame) window.startGame(); if (window.showEndTurnButton) window.showEndTurnButton(true); }, 50);
                     });
                 } else {
                     closeMenu();
@@ -296,13 +276,18 @@ function update() {
     // gravity UI removed; pointer-driven temporary gravity is disabled by default
 
     const allPhysicsEntities = physicsEntities.filter(entity => entity && entity.physics);
-    updateOrbitingBodies(allPhysicsEntities, this.game.loop.delta);
+    // Only advance orbital motion and physics while a turn is running (if TurnManager is present)
+    const allowSim = !(window.TurnManager && typeof window.TurnManager.isRunning === 'function') || window.TurnManager.isRunning();
+    if (allowSim) updateOrbitingBodies(allPhysicsEntities, this.game.loop.delta);
 
     if (typeof CameraControls !== 'undefined') CameraControls.update(this);
 
     const sceneW = (this.scale && this.scale.width) ? this.scale.width : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.width) || window.innerWidth;
     const sceneH = (this.scale && this.scale.height) ? this.scale.height : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.height) || window.innerHeight;
-    stepPhysics(allPhysicsEntities, pointer, gravityMass, sceneW * GameObjects.world.scale, sceneH * GameObjects.world.scale, this.game.loop.delta);
+    if (allowSim) stepPhysics(allPhysicsEntities, pointer, gravityMass, sceneW * GameObjects.world.scale, sceneH * GameObjects.world.scale, this.game.loop.delta);
+
+    // let TurnManager progress and decide if it should end
+    try { if (window.TurnManager && typeof window.TurnManager.update === 'function') window.TurnManager.update(); } catch (e) { /* ignore */ }
 
     // update debug overlay (movable test planet)
     if (typeof updateDebugOverlay === 'function') updateDebugOverlay(this, this.game.loop.delta);

@@ -5,25 +5,28 @@
     <title>Space minotaur</title>
     <link rel="stylesheet" href="gamestyles.css">
     <!-- Load Phaser 3 and game scripts (non-module order) -->
-    <script src="./gamecode/phaser.js"></script>
-    <script src="./gamecode/physics.js"></script>
-    <script src="./gamecode/planets.js"></script>
-    <script src="./gamecode/gameobjects.js"></script>
-    <script src="./gamecode/camera.js"></script>
-    <script src="./gamecode/game.js"></script>
+    <script src="phaser.js"></script>
+    <script src="./src/physics.js"></script>
+    <script src="./src/planets.js"></script>
+    <script src="./src/gameobjects.js"></script>
+    <script src="./src/camera.js"></script>
+    <script src="./src/turn_manager.js"></script>
+    <script src="./src/game.js"></script>
     <!-- Debug overlay (uncomment to enable debug borders) -->
-    <script src="./gamecode/debug_overlay.js"></script>
+    <script src="./src/debug_overlay.js"></script>
   </head>
   <body>
     <!-- Game scripts loaded in head so opening the file directly works -->
     <div style="position: relative; width: 100%; height: 100%;" id="game-container" >
       <div id="debug-overlay" style="position: absolute; top: 10; left: 10; pointer-events: none;"></div>
+      <!-- Player UI layer: place HUD and interactive buttons here -->
+      <div id="player-ui" style="position: absolute; inset: 0; pointer-events: none; z-index:9998;"></div>
     </div>
     <!-- Start menu shown before the game starts -->
     <div id="start-menu" role="dialog" aria-label="Start menu">
       <div class="menu-inner">
-        <div class="title">Space Minotaur</div>
-        <div class="subtitle">A tiny space playground — choose an option</div>
+        <div id="start-title" class="title">Space Balls</div>
+        <div id="start-subtitle" class="subtitle">A tiny space playground, choose an option</div>
         <button id="start-play" class="start-button play">Play</button>
         <button id="start-settings-btn" class="start-button settings">Settings</button>
         <button id="start-exit" class="start-button exit">Exit</button>
@@ -34,27 +37,34 @@
   <!-- Standalone Settings UI -->
   <div id="settings-ui" role="dialog" aria-hidden="true" style="display:none; position:fixed; inset:0; z-index:120000; align-items:center; justify-content:center; background: rgba(0,0,0,0.7);">
     <div style="background:#071018; color:#e6eef8; padding:18px; border-radius:10px; min-width:360px; max-width:90%;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <div style="font-size:18px; font-weight:600;">Settings</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div id="settings-header-title" style="font-size:18px; font-weight:600;">Settings</div>
         <div style="display:flex; gap:8px;">
           <button id="settings-save" style="padding:8px 12px; background:#10b981; border:none; border-radius:6px; color:#042018; cursor:pointer;">Save</button>
           <button id="settings-back" style="padding:8px 12px; background:#374151; border:none; border-radius:6px; color:#e6eef8; cursor:pointer;">Back to Menu</button>
         </div>
       </div>
-      <div style="font-size:13px; color:#9fb0c8; margin-bottom:10px;">Adjust gameplay options below. Save to apply.</div>
+      <div id="settings-header-subtitle" style="font-size:13px; color:#9fb0c8; margin-bottom:10px;">Adjust gameplay options below. Save to apply.</div>
       <div style="display:flex; flex-direction:column; gap:10px;">
-        <label style="color:#cfe6f8">Number of planets</label>
+        <label id="settings-label-planets" style="color:#cfe6f8">Number of planets</label>
         <input id="settings-planets" type="number" min="0" max="12" value="3" style="padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.02); color:#e6eef8;" />
-        <label style="color:#cfe6f8">Number of real players</label>
+        <label id="settings-label-players" style="color:#cfe6f8">Number of real players</label>
         <input id="settings-realplayers" type="number" min="1" max="16" value="1" style="padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.02); color:#e6eef8;" />
+        <div style="display:flex; gap:8px; align-items:center;">
+          <label id="settings-label-language" style="color:#cfe6f8; margin-right:8px;">Language</label>
+          <select id="settings-language" style="padding:6px; border-radius:6px; background:rgba(255,255,255,0.02); color:#e6eef8; border:1px solid rgba(255,255,255,0.06);">
+            <option value="en">English</option>
+            <option value="pt">Português</option>
+          </select>
+        </div>
       </div>
     </div>
   </div>
     <!-- HTML layer main menu / pause overlay -->
     <div id="main-menu" role="dialog" aria-hidden="true" aria-label="Main menu">
       <div class="menu-inner">
-        <h2 style="margin:0 0 12px 0;">Paused</h2>
-        <div style="margin-bottom:12px; font-size:14px; color:#9fb0c8">Press Esc to resume</div>
+        <h2 id="mainmenu-headerTitle" style="margin:0 0 12px 0;">Paused</h2>
+        <div id="mainmenu-headerSubtitle" style="margin-bottom:12px; font-size:14px; color:#9fb0c8">Press Esc to resume</div>
         <button id="menu-resume">Resume</button>
         <button id="menu-restart">Restart</button>
         <button id="menu-settings">Settings</button>
@@ -71,112 +81,68 @@
         </div>
       </div>
     </div>
-    <script>
-      // Change this URL to whichever site you want Exit to redirect to.
-      const EXIT_URL = 'https://ballsfactory.net';
-
-      // Settings stored here; persisted in localStorage
-      window.GAME_SETTINGS = window.GAME_SETTINGS || {
-        realPlayers: Number(localStorage.getItem('realPlayers') || 1),
-        planets: Number(localStorage.getItem('planets') || 3)
-      };
-
-      // Open the standalone settings UI from start menu
-      document.getElementById('start-settings-btn').addEventListener('click', function () {
-        const s = document.getElementById('settings-ui');
-        if (!s) return;
-        // populate inputs from stored settings
-        document.getElementById('settings-planets').value = window.GAME_SETTINGS.planets;
-        document.getElementById('settings-realplayers').value = window.GAME_SETTINGS.realPlayers;
-        s.style.display = 'flex';
-        s.setAttribute('aria-hidden', 'false');
-      });
-
-      document.getElementById('start-play').addEventListener('click', function () {
-        // hide start menu, start the Phaser game
-        document.getElementById('start-menu').style.display = 'none';
-        // call startGame exposed by game.js
-        if (window.startGame) {
-          window.startGame();
-          // focus the canvas if present
-          setTimeout(() => { const c = document.querySelector('canvas'); if (c) c.focus(); }, 200);
-        } else {
-          console.warn('startGame() not found');
-        }
-      });
-
-      document.getElementById('start-exit').addEventListener('click', function () {
-        window.location.href = EXIT_URL;
-      });
-
-      // Initialize settings UI visibility
-      // showStartSettings is no longer used for standalone settings
-      // populate any inputs if needed
-      document.getElementById('settings-planets').value = window.GAME_SETTINGS.planets;
-      document.getElementById('settings-realplayers').value = window.GAME_SETTINGS.realPlayers;
-      
-      // Hook settings UI buttons
-      document.getElementById('settings-back').addEventListener('click', function () {
-        const s = document.getElementById('settings-ui');
-        if (!s) return;
-        s.style.display = 'none';
-        s.setAttribute('aria-hidden', 'true');
-      });
-      document.getElementById('settings-save').addEventListener('click', function () {
-        const planets = Number(document.getElementById('settings-planets').value) || 0;
-        const players = Number(document.getElementById('settings-realplayers').value) || 1;
-        window.GAME_SETTINGS.planets = Math.max(0, Math.min(12, planets));
-        window.GAME_SETTINGS.realPlayers = Math.max(1, Math.min(16, players));
-        localStorage.setItem('planets', window.GAME_SETTINGS.planets);
-        localStorage.setItem('realPlayers', window.GAME_SETTINGS.realPlayers);
-        // apply planet count into GameObjects if available
-        try { if (window.GameObjects && window.GameObjects.orbitalSystem) {
-            const count = window.GAME_SETTINGS.planets;
-            // rebuild orbiters using first `count` colors/definitions
-            const baseOrbiters = [
-              { orbitRadius: 950, radius: 50, color: 0xffcc33, angularSpeed: 0.1, startAngle: 0 },
-              { orbitRadius: 1400, radius: 60, color: 0x33ffcc, angularSpeed: 0.09, startAngle: Math.PI * 0.4 },
-              { orbitRadius: 2800, radius: 80, color: 0xff33bb, angularSpeed: 0.06, startAngle: Math.PI * 0.8 },
-              { orbitRadius: 3600, radius: 42, color: 0x7fff00, angularSpeed: 0.05, startAngle: Math.PI * 0.2 },
-              { orbitRadius: 4200, radius: 36, color: 0xff8800, angularSpeed: 0.04, startAngle: Math.PI * 0.6 },
-              { orbitRadius: 4800, radius: 28, color: 0x00aaff, angularSpeed: 0.03, startAngle: Math.PI * 0.1 }
-            ];
-            window.GameObjects.orbitalSystem.orbiters = baseOrbiters.slice(0, Math.max(0, Math.min(baseOrbiters.length, window.GAME_SETTINGS.planets)));
-        }} catch (e) { console.warn(e); }
-        // close settings UI and return to start menu
-        const s = document.getElementById('settings-ui');
-        if (s) { s.style.display = 'none'; s.setAttribute('aria-hidden','true'); }
-      });
-      // Confirmation modal helpers
-      window.showConfirm = function (message, onConfirm) {
-        const modal = document.getElementById('confirm-modal');
-        const msg = document.getElementById('confirm-message');
-        const yes = document.getElementById('confirm-yes');
-        const no = document.getElementById('confirm-no');
-        if (!modal || !msg || !yes || !no) return;
-        msg.textContent = message || 'Are you sure?';
-        modal.style.display = 'flex';
-        modal.setAttribute('aria-hidden', 'false');
-
-        const cleanup = () => {
-          modal.style.display = 'none';
-          modal.setAttribute('aria-hidden', 'true');
-          yes.removeEventListener('click', onYes);
-          no.removeEventListener('click', onNo);
-          document.removeEventListener('keydown', onKey);
-        };
-
-        function onYes() {
-          cleanup();
-          if (typeof onConfirm === 'function') onConfirm();
-        }
-        function onNo() { cleanup(); }
-        function onKey(e) { if (e.key === 'Escape') onNo(); }
-
-        yes.addEventListener('click', onYes);
-        no.addEventListener('click', onNo);
-        document.addEventListener('keydown', onKey);
-      };
+    <!-- Inline locale fallbacks to support opening via file:// (avoids CORS) -->
+    <script id="i18n-en" type="application/json">
+{
+  "start-title": "Space Balls",
+  "start-subtitle": "A tiny space playground, choose an option",
+  "start-play": "Play",
+  "start-settings-btn": "Settings",
+  "start-exit": "Exit",
+  "settings-header-title": "Settings",
+  "settings-header-subtitle": "Adjust your preferences",
+  "settings-save": "Save",
+  "settings-back": "Back to Menu",
+  "settings-label-planets": "Number of planets",
+  "settings-label-players": "Number of real players",
+  "settings-label-language": "Language",
+  "mainmenu-headerTitle": "Paused",
+  "mainmenu-headerSubtitle": "Press Esc to resume",
+  "menu-resume": "Resume",
+  "menu-restart": "Restart",
+  "menu-settings": "Settings",
+  "menu-exit": "Exit to Main Menu",
+  "confirm-message": "Are you sure?",
+  "confirm-yes": "Yes",
+  "confirm-no": "No",
+  "end-turn-btn": "Next Turn",
+  "end-turn-btn-running": "Turn Running",
+  "end-turn-btn-confirm": "Confirm"
+}
     </script>
+    <script id="i18n-pt" type="application/json">
+{
+  "start-title": "Space Balls",
+  "start-subtitle": "Um pequeno playground espacial, escolha uma opção",
+  "start-play": "Jogar",
+  "start-settings-btn": "Configurações",
+  "start-exit": "Sair",
+  "settings-header-title": "Configurações",
+  "settings-header-subtitle": "Ajuste suas preferências",
+  "settings-save": "Salvar",
+  "settings-back": "Voltar ao Menu",
+  "settings-label-planets": "Número de planetas",
+  "settings-label-players": "Número de jogadores reais",
+  "settings-label-language": "Idioma",
+  "mainmenu-headerTitle": "Pausado",
+  "mainmenu-headerSubtitle": "Pressione Esc para retomar",
+  "menu-resume": "Retomar",
+  "menu-restart": "Reiniciar",
+  "menu-settings": "Configurações",
+  "menu-exit": "Sair para o Menu Principal",
+  "confirm-message": "Tem certeza?",
+  "confirm-yes": "Sim",
+  "confirm-no": "Não",
+  "end-turn-btn": "Próximo Turno",
+  "end-turn-btn-running": "Turno em Execução",
+  "end-turn-btn-confirm": "Confirmar"
+}
+    </script>
+    <script src="./src/localize.js"></script>
+    <script src="./src/screens/ui_common.js"></script>
+    <script src="./src/screens/ui_start.js"></script>
+    <script src="./src/screens/ui_settings.js"></script>
+    <script src="./src/screens/ui_confirm.js"></script>
+    <script src="./src/screens/ui_endturn.js"></script>
   </body>
 </html>
