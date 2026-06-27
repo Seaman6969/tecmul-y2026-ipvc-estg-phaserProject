@@ -49,8 +49,76 @@ let fixedPlanets;
 let physicsEntities;
 let rd = 150;
 let G = 2000;
+let starfieldTiles = [];
+let starfieldCols = 0;
+let starfieldRows = 0;
+let starfieldTileSize = 1024;
 
 function preload() { }
+
+function updateStarfieldRender(scene) {
+    if (!scene || !Array.isArray(starfieldTiles) || starfieldTiles.length === 0) return;
+    const cam = scene.cameras && scene.cameras.main;
+    if (!cam || !cam.worldView) return;
+
+    const view = cam.worldView;
+    const tileSize = starfieldTileSize;
+    const visibleX0 = Math.max(0, Math.floor(view.x / tileSize));
+    const visibleY0 = Math.max(0, Math.floor(view.y / tileSize));
+    const visibleX1 = Math.min(starfieldCols - 1, Math.floor((view.right - 1) / tileSize));
+    const visibleY1 = Math.min(starfieldRows - 1, Math.floor((view.bottom - 1) / tileSize));
+
+    starfieldTiles.forEach((tile) => {
+        const xIndex = tile.starfieldX;
+        const yIndex = tile.starfieldY;
+        tile.visible = xIndex >= visibleX0 && xIndex <= visibleX1 && yIndex >= visibleY0 && yIndex <= visibleY1;
+    });
+}
+
+function createStarfieldTiles(scene, worldWidth, worldHeight) {
+    const tileSize = (GameObjects.stars && GameObjects.stars.tileSize) ? GameObjects.stars.tileSize : 1024;
+    starfieldTileSize = tileSize;
+    const starsPerTile = (GameObjects.stars && GameObjects.stars.starsPerTile) ? GameObjects.stars.starsPerTile : 800;
+    const key = 'stars_tile';
+
+    if (!scene.textures.exists(key)) {
+        const tile = scene.textures.createCanvas(key, tileSize, tileSize);
+        const ctx = tile.context;
+        ctx.clearRect(0, 0, tileSize, tileSize);
+        for (let i = 0; i < starsPerTile; i++) {
+            const sx = Math.random() * tileSize;
+            const sy = Math.random() * tileSize;
+            const r = Phaser.Math.FloatBetween(GameObjects.stars.minRadius, GameObjects.stars.maxRadius);
+            const a = Phaser.Math.FloatBetween(GameObjects.stars.minAlpha, GameObjects.stars.maxAlpha);
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(255,255,255,${a})`;
+            ctx.arc(sx, sy, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        tile.refresh();
+    }
+
+    starfieldTiles.forEach(tile => tile.destroy());
+    starfieldTiles = [];
+
+    starfieldCols = Math.ceil(worldWidth / tileSize);
+    starfieldRows = Math.ceil(worldHeight / tileSize);
+
+    for (let ty = 0; ty < starfieldRows; ty++) {
+        for (let tx = 0; tx < starfieldCols; tx++) {
+            const tileX = tx * tileSize;
+            const tileY = ty * tileSize;
+            const tileW = Math.min(tileSize, worldWidth - tileX);
+            const tileH = Math.min(tileSize, worldHeight - tileY);
+            const tileSprite = scene.add.image(tileX, tileY, key).setOrigin(0, 0);
+            tileSprite.setDisplaySize(tileW, tileH);
+            tileSprite.setDepth(-1000);
+            tileSprite.starfieldX = tx;
+            tileSprite.starfieldY = ty;
+            starfieldTiles.push(tileSprite);
+        }
+    }
+}
 
 function create() {
     let sceneWidth = (this.scale && this.scale.width) ? this.scale.width : (this.sys && this.sys.game && this.sys.game.config && this.sys.game.config.width) || window.innerWidth,
@@ -58,22 +126,16 @@ function create() {
         worldWidth = sceneWidth * GameObjects.world.scale,
         worldHeight = sceneHeight * GameObjects.world.scale;
 
-    for (let i = 0; i < GameObjects.world.starCount; i++) {
-        const x = Phaser.Math.Between(0, worldWidth);
-        const y = Phaser.Math.Between(0, worldHeight);
-        const radius = Phaser.Math.FloatBetween(GameObjects.stars.minRadius, GameObjects.stars.maxRadius);
-        const alpha = Phaser.Math.FloatBetween(GameObjects.stars.minAlpha, GameObjects.stars.maxAlpha);
-        const star = this.add.circle(x, y, radius, 0xffffff, alpha);
-
-        this.tweens.add({
-            targets: star,
-            alpha: 0.1,
-            duration: Phaser.Math.Between(1500, 4000),
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        });
-    }
+    // Create static starfield tiles for the entire world once up front.
+    try {
+        createStarfieldTiles(this, worldWidth, worldHeight);
+        updateStarfieldRender(this);
+        try {
+            this.events.on('postupdate', () => updateStarfieldRender(this));
+        } catch (e) { }
+        // debug: log texture and starfield state
+        try { console.log('Starfield sources created:', this.textures.exists('stars_tile'), 'cols:', starfieldCols, 'rows:', starfieldRows); } catch (e) { }
+    } catch (e) { console.warn('Starfield generation failed', e); }
 
     const particleCanvas = this.textures.createCanvas('trail_particle', 16, 16);
     const ctx = particleCanvas.context;
@@ -137,6 +199,7 @@ function create() {
             CameraControls.state.updateLetterbox();
         }
         if (typeof DebugOverlay !== 'undefined') DebugOverlay.update(this);
+        updateStarfieldRender(this);
     };
     window.addEventListener('resize', onResize, { passive: true });
     this.events.once('shutdown', () => window.removeEventListener('resize', onResize));
@@ -272,6 +335,8 @@ function toggleMenu() {
 }
 
 function update() {
+    updateStarfieldRender(this);
+
     const pointer = this.input.activePointer;
     // gravity UI removed; pointer-driven temporary gravity is disabled by default
 

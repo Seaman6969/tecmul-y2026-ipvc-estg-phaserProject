@@ -20,9 +20,13 @@ window.GameObjects = {
   // --- Starfield settings ---
   stars: {
     minRadius: 0.5,
-    maxRadius: 2,
-    minAlpha: 0.15,
-    maxAlpha: 0.75,
+    maxRadius: 1.5,
+    minAlpha: 0.2,
+    maxAlpha: 0.65,
+    // size of the generated tile texture (kept modest to avoid huge allocations)
+    tileSize: 1024,
+    // how many stars to paint into each tile (more = denser sky when tiled)
+    starsPerTile: 12000,
   },
 
   // --- Planet color palette ---
